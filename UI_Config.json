@@ -1,0 +1,92 @@
+{
+	"output_file": "settings.json",
+	"RunCommandsOnlyWhenLive": {
+		"type": "checkbox",
+		"value": "true",
+		"label": "Accept Commands Only When Live",
+		"tooltip": "Indicates whether the script only accepts commands while you are live.",
+		"group": "General"
+	},
+	"DisplayPermissions": {
+	        "type": "dropdown",
+	        "value": "Everyone",
+	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
+	        "label": "Display Permissions",
+	        "tooltip": "The permission level required to display the queue with !communityqueue.",
+		"group": "General"
+    	},
+	"ModifyPermissions": {
+	        "type": "dropdown",
+	        "value": "Moderator",
+	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
+	        "label": "Modify Permissions",
+	        "tooltip": "The permission level required to modify the queue with !communityqueue remove, etc..",
+		"group": "General"
+    	},
+	"CommandName": {
+	        "type": "textbox",
+	        "value": "queue",
+	        "label": "Command Name",
+	        "tooltip": "The command name is ! then whatever is in this box.",
+		"group": "General"
+    	},
+	"DisplayLimit": {
+	        "type": "numberbox",
+	        "value": "10",
+	        "label": "Queue Display Limit",
+	        "tooltip": "The maximum number of queued games that will be displayed with !communityqueue.",
+		"group": "General"
+    	},
+	"TwitchRewardName": {
+		"type": "textbox",
+		"value": "",
+		"label": "Title of Redemption",
+		"tooltip": "Specify the name of the Channel Points Redemption that will trigger this event when detected.",
+		"group": "General"
+	},
+	"TwitchOAuthToken": {
+		"type": "textbox",
+		"value": "",
+		"label": "Twitch oAuth Token",
+		"tooltip": "Enter an oAuth token that allows the bot to read channel point redemptions on the channel being watched.",
+		"group": "Twitch oAuth - KEEP HIDDEN"
+	},
+	"btnGetToken": {
+		"type": "button",
+		"label": "Get Token",
+		"tooltip": "Generate an oAuth Token for the watched twitch account with permissions to read channel point redemptions.",
+		"wsevent": "",
+		"function": "GetToken",
+		"group": "Twitch oAuth - KEEP HIDDEN"
+	},
+	"DisplayMessageOnGameUnknown": {
+		"type": "checkbox",
+		"value": false,
+		"label": "If Game is Unknown, Display Redemption Message Instead",
+		"tooltip": "When the value of Game is 'Unknown', display the value of Message instead.",
+		"group": "Output Settings"
+	},
+	"EnableResponses": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Responses",
+		"tooltip": "Enable or disable bot responses to flag redemptions.",
+		"group": "Output Settings"
+	},
+	"EnableDebug": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Debug",
+		"tooltip": "Enable or disable debug logs.",
+		"group": "Output Settings"
+	},
+	"btnreadme": {
+		"type": "button",
+		"label": "Open Readme",
+		"tooltip": "Opens the readme file.",
+		"wsevent": "",
+		"_comment": "Do not change the function name! Ever!!",
+		"function": "openreadme",
+		"group": ""
+	}
+}
