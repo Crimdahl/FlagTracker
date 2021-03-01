@@ -302,6 +302,7 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
 def Unload():
     # Disconnect EventReceiver cleanly
     try:
+        global EventReceiver
         if EventReceiver:
             EventReceiver.Disconnect()
             EventReceiver = None
