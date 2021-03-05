@@ -272,7 +272,7 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
         Log(dataUserName + " is redeeming " + reward + " with flag information " + message)
 
     MessageString = str(message)
-    if any (keyword in MessageString for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "ktrap"]):
+    if any (keyword in MessageString for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal"]):
         New_Game = "FF4 Free Enterprise"
     elif any (keyword in MessageString for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC"]) or len(MessageString) > 350:
         New_Game = "FF6 Worlds Collide"
