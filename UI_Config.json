@@ -8,35 +8,35 @@
 		"group": "General"
 	},
 	"DisplayPermissions": {
-	        "type": "dropdown",
-	        "value": "Everyone",
-	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
-	        "label": "Display Permissions",
-	        "tooltip": "The permission level required to display the queue with !communityqueue.",
+		"type": "dropdown",
+		"value": "Everyone",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor" ],
+		"label": "Display Permissions",
+		"tooltip": "The permission level required to display the queue with !communityqueue.",
 		"group": "General"
-    	},
+	},
 	"ModifyPermissions": {
-	        "type": "dropdown",
-	        "value": "Moderator",
-	        "items": ["Everyone","Regular","Subscriber","Moderator","Editor"],
-	        "label": "Modify Permissions",
-	        "tooltip": "The permission level required to modify the queue with !communityqueue remove, etc..",
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor" ],
+		"label": "Modify Permissions",
+		"tooltip": "The permission level required to modify the queue with !communityqueue remove, etc..",
 		"group": "General"
-    	},
+	},
 	"CommandName": {
-	        "type": "textbox",
-	        "value": "queue",
-	        "label": "Command Name",
-	        "tooltip": "The command name is ! then whatever is in this box.",
+		"type": "textbox",
+		"value": "queue",
+		"label": "Command Name",
+		"tooltip": "The command name is ! then whatever is in this box.",
 		"group": "General"
-    	},
+	},
 	"DisplayLimit": {
-	        "type": "numberbox",
-	        "value": "10",
-	        "label": "Queue Display Limit",
-	        "tooltip": "The maximum number of queued games that will be displayed with !communityqueue.",
+		"type": "numberbox",
+		"value": "10",
+		"label": "Queue Display Limit",
+		"tooltip": "The maximum number of queued games that will be displayed with !communityqueue.",
 		"group": "General"
-    	},
+	},
 	"TwitchRewardName": {
 		"type": "textbox",
 		"value": "",
@@ -58,6 +58,27 @@
 		"wsevent": "",
 		"function": "GetToken",
 		"group": "Twitch oAuth - KEEP HIDDEN"
+	},
+	"EnableGoogleSheets": {
+		"type": "checkbox",
+		"value": false,
+		"label": "Enable Google Sheets",
+		"tooltip": "Enable or disable updating a Google Sheet with your redemption information.",
+		"group": "Google Sheets Settings"
+	},
+	"SpreadsheetID": {
+		"type": "textbox",
+		"value": "",
+		"label": "Google Sheets ID",
+		"tooltip": "Enter your spreadsheet's ID here.",
+		"group": "Google Sheets Settings"
+	},
+	"Sheet": {
+		"type": "textbox",
+		"value": "",
+		"label": "Worksheet Name",
+		"tooltip": "Enter the sheet within your spreadsheet to modify.",
+		"group": "Google Sheets Settings"
 	},
 	"DisplayMessageOnGameUnknown": {
 		"type": "checkbox",
@@ -87,6 +108,15 @@
 		"wsevent": "",
 		"_comment": "Do not change the function name! Ever!!",
 		"function": "openreadme",
+		"group": ""
+	},
+	"test": {
+		"type": "button",
+		"label": "test",
+		"tooltip": "test",
+		"wsevent": "",
+		"_comment": "test",
+		"function": "testing",
 		"group": ""
 	}
 }

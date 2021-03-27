@@ -131,3 +131,6 @@ GoogleSheetUpdater/token.json
 GoogleSheetUpdater/redemptions.json
 GoogleSheetUpdater/settings.json
 GoogleSheetUpdater/credentials.json
+redemptions.json
+settings.js
+settings.json

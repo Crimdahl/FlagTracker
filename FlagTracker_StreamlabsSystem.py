@@ -3,7 +3,7 @@
 # Importing Required Libraries
 import sys
 sys.platform = "win32"
-import codecs, json, os, re, io, threading, datetime, clr, math
+import codecs, json, os, re, io, threading, datetime, clr, math, subprocess
 clr.AddReference("IronPython.Modules.dll")
 clr.AddReferenceToFileAndPath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "References", "TwitchLib.PubSub.dll"))
 from TwitchLib.PubSub import TwitchPubSub
@@ -17,6 +17,7 @@ Version = "1.1.0"
 
 #   Define Global Variables <Required>
 ScriptPath = os.path.dirname(__file__)
+GoogleUpdaterPath = os.path.join(ScriptPath, "GoogleSheetsUpdater.exe")
 SettingsPath = os.path.join(ScriptPath, "settings.json")
 ReadmePath = os.path.join(ScriptPath, "Readme.md")
 ScriptSettings = None
@@ -70,6 +71,11 @@ class Settings(object):
             #Twitch Settings
             self.TwitchOAuthToken = ""
             self.TwitchRewardName = ""
+
+            #Google Sheets Settings
+            self.EnableGoogleSheets = False
+            self.SpreadsheetID = ""
+            self.Sheet = ""
 
     def Reload(self, jsondata):
         self.__dict__ = json.loads(jsondata, encoding="utf-8")
@@ -343,6 +349,12 @@ def SaveRedemptions():
             #When writing the Questions to disk, use the Question.toJSON() function
             json.dump(Redemptions, outfile, indent=4, default=lambda q: q.toJSON())
             outfile.truncate()
+
+        if ScriptSettings.EnableGoogleSheets: 
+            if ScriptSettings.SpreadsheetID == "":
+                Log("Error: You must enter a valid spreadsheetId to use Google Sheets.")
+                return
+            os.startfile(GoogleUpdaterPath)
     except OSError as e:
         Log("ERROR: Unable to save redemptions! " + e.message)
 
@@ -382,3 +394,6 @@ def GetAttribute(attribute, message):
         return message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
     # else:
     #     raise AttributeError(str(attribute) + " was not found in the supplied information.")
+
+def testing():
+    os.system(GoogleUpdaterPath)
