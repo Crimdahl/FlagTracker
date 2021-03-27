@@ -109,14 +109,5 @@
 		"_comment": "Do not change the function name! Ever!!",
 		"function": "openreadme",
 		"group": ""
-	},
-	"test": {
-		"type": "button",
-		"label": "test",
-		"tooltip": "test",
-		"wsevent": "",
-		"_comment": "test",
-		"function": "testing",
-		"group": ""
 	}
 }

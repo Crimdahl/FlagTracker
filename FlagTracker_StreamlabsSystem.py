@@ -97,20 +97,22 @@ def Execute(data):
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
             or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
         ):
-
-        if len(Redemptions) > 0:
-            index = 1
-            for redemption in Redemptions:
-                if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game != "Unknown":
-                    Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
-                else:
-                    Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
-                index = index + 1
-                if index > ScriptSettings.DisplayLimit:
-                    break
-            return
+        if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
+            Post("https://docs.google.com/spreadsheets/d/" + ScriptSettings.SpreadsheetID)
         else:
-            Post("The community queue is empty!")
+            if len(Redemptions) > 0:
+                index = 1
+                for redemption in Redemptions:
+                    if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game != "Unknown":
+                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
+                    else:
+                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
+                    index = index + 1
+                    if index > ScriptSettings.DisplayLimit:
+                        break
+                return
+            else:
+                Post("The community queue is empty!")
     elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
         and Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
@@ -354,7 +356,7 @@ def SaveRedemptions():
             if ScriptSettings.SpreadsheetID == "":
                 Log("Error: You must enter a valid spreadsheetId to use Google Sheets.")
                 return
-            os.startfile(GoogleUpdaterPath)
+        os.system(GoogleUpdaterPath)
     except OSError as e:
         Log("ERROR: Unable to save redemptions! " + e.message)
 
@@ -396,4 +398,4 @@ def GetAttribute(attribute, message):
     #     raise AttributeError(str(attribute) + " was not found in the supplied information.")
 
 def testing():
-    os.system(GoogleUpdaterPath)
+    pass

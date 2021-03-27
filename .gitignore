@@ -134,3 +134,14 @@ GoogleSheetUpdater/credentials.json
 redemptions.json
 settings.js
 settings.json
+FlagTracker.zip
+FlagTracker/FlagTracker_StreamlabsSystem.py
+FlagTracker/GoogleSheetsUpdater.exe
+FlagTracker/README.md
+FlagTracker/References/Microsoft.Extensions.Logging.Abstractions.dll
+FlagTracker/References/Microsoft.Extensions.Logging.Abstractions.xml
+FlagTracker/References/Newtonsoft.Json.dll
+FlagTracker/References/Newtonsoft.Json.xml
+FlagTracker/References/TwitchLib.Communication.dll
+FlagTracker/References/TwitchLib.PubSub.dll
+FlagTracker/UI_Config.json
