@@ -12,6 +12,10 @@ Once installed you will need to provide an oAuth token. You can get one by click
 This button also exists in the streamlabs chatbot UI. Make sure you don't show this token on stream, it is as sensitive
 as your stream key!
 
+If you are using Google Sheets, you should be prompted to sign in to Google and then give permission for the script to modify 
+the Google Sheet that corresponds to the Google Sheets ID supplied in the options. This stores a token in the script directory
+so it does not need to ask for permissions every time.
+
 ## Use
 ### Options
 -Accept Commands Only When Live: Toggles the ability to respond to chat commands when offline. (Default: True)
@@ -27,6 +31,12 @@ as your stream key!
 -Title of Redemption: The name of the redemption the script should listen for and log from. (No default)
 
 -Twitch oAuth Token: Your Twitch oAuth token to authenticate the redemption listener. (No default)
+
+-Enable Google Sheets: The toggle to enable usage of Google Sheets
+
+-Google Sheets ID: The id of your Google Sheet. To get your ID, visit your Google Sheet. The ID will be the part in the address bar after "/d/" but before the next "/"
+
+-Worksheet Name: The Sheet the script should update. To get your Sheet Name, visit your Google Sheet. The Sheet name is on the tabs at the bottom of the screen.
 
 -Enable Responses: Toggles the ability to post responses to your command directly in Twitch chat. (Default: True)
 
