@@ -326,7 +326,6 @@ def openreadme():
 
 #   Opens Twitch.TV website to ask permissions
 def GetToken(): 
-    # os.startfile("https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=7a4xexuuxvxw5jmb9httrqq9926frq&redirect_uri=https://twitchapps.com/tmi/&scope=channel:read:redemptions&force_verify=true")
     os.startfile("https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=7a4xexuuxvxw5jmb9httrqq9926frq&redirect_uri=https://twitchapps.com/tokengen/&scope=channel:read:redemptions&force_verify=true")
     return
 
@@ -353,8 +352,8 @@ def SaveRedemptions():
             outfile.truncate()
 
         if ScriptSettings.EnableGoogleSheets: 
-            if ScriptSettings.SpreadsheetID == "":
-                Log("Error: You must enter a valid spreadsheetId to use Google Sheets.")
+            if ScriptSettings.SpreadsheetID == "" or ScriptSettings.Sheet == "":
+                Log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
                 return
         os.system(GoogleUpdaterPath)
     except OSError as e:
