@@ -1,0 +1,1 @@
+﻿{"EnableDebug": true, "EnableResponses": true, "DisplayMessageOnGameUnknown": false, "RunCommandsOnlyWhenLive": true, "DisplayPermissions": "Everyone", "ModifyPermissions": "Moderator", "CommandName": "queue", "DisplayLimit": "10", "TwitchOAuthToken": "", "TwitchRewardName": ""}

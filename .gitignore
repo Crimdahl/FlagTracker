@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+GoogleSheetUpdater/token.json
+GoogleSheetUpdater/redemptions.json
+GoogleSheetUpdater/settings.json
+GoogleSheetUpdater/credentials.json
