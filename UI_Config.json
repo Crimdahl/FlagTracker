@@ -37,11 +37,11 @@
 		"tooltip": "The maximum number of queued games that will be displayed with !communityqueue.",
 		"group": "General"
 	},
-	"TwitchRewardName": {
+	"TwitchRewardNames": {
 		"type": "textbox",
 		"value": "",
-		"label": "Title of Redemption",
-		"tooltip": "Specify the name of the Channel Points Redemption that will trigger this event when detected.",
+		"label": "Redemption Names",
+		"tooltip": "Specify the names of the Channel Point Redemptions that will trigger this event. Separate names with commas.",
 		"group": "General"
 	},
 	"TwitchOAuthToken": {

@@ -22,6 +22,7 @@ SettingsPath = os.path.join(ScriptPath, "settings.json")
 ReadmePath = os.path.join(ScriptPath, "Readme.md")
 ScriptSettings = None
 
+RedemptionNames = []
 Redemptions = []
 RedemptionsPath = os.path.join(ScriptPath, "redemptions.json")
 
@@ -70,15 +71,18 @@ class Settings(object):
 
             #Twitch Settings
             self.TwitchOAuthToken = ""
-            self.TwitchRewardName = ""
+            self.TwitchRewardNames = ""
 
             #Google Sheets Settings
             self.EnableGoogleSheets = False
             self.SpreadsheetID = ""
             self.Sheet = ""
 
+            RedemptionNames = [name.strip() for name in self.TwitchRewardNames.split(",")]
+
     def Reload(self, jsondata):
         self.__dict__ = json.loads(jsondata, encoding="utf-8")
+        RedemptionNames = [name.strip() for name in self["TwitchRewardNames"].split(",")]
         return
 
     def Save(self, SettingsPath):
@@ -271,7 +275,9 @@ def EventReceiverRewardRedeemed(sender, e):
     reward = e.RewardTitle
     message = e.Message
 
-    if e.RewardTitle == ScriptSettings.TwitchRewardName:
+    
+
+    if e.RewardTitle in RedemptionNames:
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(reward, message, dataUser, dataUserName)))
     return
 
