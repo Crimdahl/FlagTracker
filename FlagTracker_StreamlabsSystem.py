@@ -110,10 +110,11 @@ def Execute(data):
             if len(Redemptions) > 0:
                 index = 1
                 for redemption in Redemptions:
-                    if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game != "Unknown":
-                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
-                    else:
+                    Log(redemption.Game)
+                    if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game == "Unknown":
                         Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
+                    else:
+                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
                     index = index + 1
                     if index > ScriptSettings.DisplayLimit:
                         break
@@ -400,7 +401,7 @@ def GetAttribute(attribute, message):
             raise e
         #The end index of the attribute is at the last space before the next attribute designator, or at the end of the message
         try:
-            index_of_end_of_attribute = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + message[index_of_beginning_of_attribute:].index(":")].rindex(" ")
+            index_of_end_of_attribute = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + message[index_of_beginning_of_attribute:].index(":")].rindex(",")
         except ValueError:
             #If this error is thrown, the end of the message was hit, so just return all of the remaining message
             return message[index_of_beginning_of_attribute:].strip()
