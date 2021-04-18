@@ -13,7 +13,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.1.0"
+Version = "1.1.3-Beta"
 
 #   Define Global Variables <Required>
 ScriptPath = os.path.dirname(__file__)
@@ -95,106 +95,137 @@ class Settings(object):
 
 #   Process messages <Required>
 def Execute(data):
-    #Log(str(inspect.getmembers(data)))
     user_id = GetUserID(data.RawData)
-    if (
-        data.Message == "!" + ScriptSettings.CommandName
-        and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "") 
-        or user_id == "216768170")
-        and (not ScriptSettings.RunCommandsOnlyWhenLive 
-            or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
-        ):
-        if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
-            Post("https://docs.google.com/spreadsheets/d/" + ScriptSettings.SpreadsheetID)
-        else:
-            if len(Redemptions) > 0:
-                index = 1
-                for redemption in Redemptions:
-                    Log(redemption.Game)
-                    if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game == "Unknown":
-                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
-                    else:
-                        Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
-                    index = index + 1
-                    if index > ScriptSettings.DisplayLimit:
-                        break
-                return
+
+    #Check if the streamer is live. Still run commands if the script is set to run while offline
+    if Parent.IsLive() or not ScriptSettings.RunCommandsOnlyWhenLive:
+        #Check if the message begins with "!" and the command name AND the user has permissions to run the command
+        if (str(data.Message).startswith("!" + ScriptSettings.CommandName) 
+            and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "")                                                 
+                or user_id == "216768170")):
+            #If the user is using Google Sheets, post a link to the Google Sheet in chat
+            if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
+                Post("https://docs.google.com/spreadsheets/d/" + ScriptSettings.SpreadsheetID)
+            #If the user is not using Google Sheets, read lines from the json file in the script directory
             else:
-                Post("The community queue is empty!")
-    elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
-        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-        or user_id == "216768170")
-        and (not ScriptSettings.RunCommandsOnlyWhenLive 
-            or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
-        ):
-        if data.GetParamCount() >= 3: 
-            DataString = str(data.Message)
-            DataArray = DataString[DataString.index("remove") + len("remove"):].replace(" ","").split(",")
-            DataArray.sort()
-            if ScriptSettings.EnableDebug: Log("Removing the following indexes from Redemptions: " + str(DataArray))
-            RemovedCount = 1
-            for num in DataArray:
-                try:
-                    Redemptions.pop(int(num) - RemovedCount)
-                    RemovedCount = RemovedCount + 1
-                except (ValueError, IndexError) as e:
-                    if ScriptSettings.EnableDebug: Log("Error handled by remove: " + e.message)
-                    continue
-            SaveRedemptions()
-        else:
-            if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
-    elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " add") 
-        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-        or user_id == "216768170")
-        and (not ScriptSettings.RunCommandsOnlyWhenLive 
-            or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
-        ):
-        if data.GetParamCount() >= 3: 
-            DataString = str(data.Message)
-            DataArray = DataString[DataString.index("add") + len("add"):].split("|")
-            for info in DataArray:
-                if ScriptSettings.EnableDebug: Log("Adding new redemption via add command: " + str(info))
-                try:
-                    NewUser = GetAttribute("Username", info)
-                    NewMessage = GetAttribute("Message", info)
-                    try:
-                        NewGame = GetAttribute("Game", info)
-                    except AttributeError:
-                        NewGame = "Unknown"
-                    Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
-                except (ValueError, IndexError) as e:
-                    if ScriptSettings.EnableDebug: Log("Error handled by add: " + e.message)
-                    continue
-            SaveRedemptions()
-        else:
-            if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
-    elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " edit") 
-        and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-        or user_id == "216768170")
-        and (not ScriptSettings.RunCommandsOnlyWhenLive 
-            or (ScriptSettings.RunCommandsOnlyWhenLive and Parent.IsLive()))
-        ):
-        if data.GetParamCount() >= 3: 
-            try:
-                index = int(data.GetParam(2))
-                data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):]
-                if "game" in data.lower():
-                     Redemptions[index - 1].setGame(GetAttribute("Game", data)) 
-                     SaveRedemptions()
-                elif "message" in data.lower():
-                     Redemptions[index - 1].setMessage(GetAttribute("Message", data)) 
-                     SaveRedemptions()
-                elif "username" in data.lower():
-                     Redemptions[index - 1].setUsername(GetAttribute("Username", data)) 
-                     SaveRedemptions()
+                if len(Redemptions) > 0:
+                    #An index is displayed with each line. The index can be referenced with other commands.
+                    index = 1
+                    for redemption in Redemptions:
+                        Log(redemption.Game)
+                        if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game == "Unknown":
+                            Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
+                        else:
+                            Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
+                        index = index + 1
+                        if index > ScriptSettings.DisplayLimit:
+                            break
+                    return
                 else:
-                    if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
-                    if ScriptSettings.EnableDebug: Log("Edit function supplied incorrect argument: " + data)
-            except ValueError as e:
+                    Post("The community queue is empty!")
+        #Check if the user is attempting to remove an item from the queue. Uses different permissions from displaying the queue.
+        elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
+            and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+                or user_id == "216768170")):
+            #Check if the supplied information has three or more parameters: !command, remove, and one or more indices
+            if data.GetParamCount() >= 3: 
+                DataString = str(data.Message)
+                #Separate the indices from the rest of the message and split them by comma delimiter
+                DataArray = DataString[DataString.index("remove") + len("remove"):].replace(" ","").split(",")
+                #It is necessary to remove them from lowest index to highest index, so sort the indices first
+                #Should I just remove from highest to lowest?
+                DataArray.sort()
+                if ScriptSettings.EnableDebug: Log("Removing the following indexes from Redemptions: " + str(DataArray))
+                #Keep track of the number of indices removed because we have to subtract that number from the supplied indices
+                RemovedCount = 1
+                for num in DataArray:
+                    try:
+                        #The indices in the redemptions are 0-based, so we can immediately subtract 1 from any user-supplied indices
+                        Redemptions.pop(int(num) - RemovedCount)
+                        RemovedCount = RemovedCount + 1
+                    except (ValueError, IndexError) as e:
+                        #Log an error if the index is either a non-integer or is outside of the range of the redemptions
+                        if ScriptSettings.EnableDebug: Log("Error handled by remove: " + e.message)
+                        continue
+                #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
+                #   remove entries from Google Sheets.
+                SaveRedemptions()
+            else:
+                #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
+        #Check if the user is attempting to add an item to the queue. Uses different permissions from displaying the queue.
+        elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " add") 
+            and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+                or user_id == "216768170")):
+            #Check if the supplied information has three or more parameters: !command, add, and one or more sets of information
+            if data.GetParamCount() >= 3: 
+                DataString = str(data.Message)
+                #Separate the information sets from the rest of the message and split them by pipe delimiter
+                DataArray = DataString[DataString.index("add") + len("add"):].split("|")
+                for info in DataArray:
+                    if ScriptSettings.EnableDebug: Log("Adding new redemption via add command: " + str(info))
+                    #Create a redemption object with the Username, Message, and Game
+                    try:
+                        #Username is mandatory
+                        NewUser = GetAttribute("Username", info)
+                        #Message is optional
+                        try:
+                            NewMessage = GetAttribute("Message", info)
+                        except AttributeError:
+                            newMessage = "No message."
+                        #Game is optional
+                        try:
+                            NewGame = GetAttribute("Game", info)
+                        except AttributeError:
+                            NewGame = "Unknown"
+                        Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
+                    except (AttributeError) as e:
+                        if ScriptSettings.EnableDebug: Log("Error handled by add: " + e.message)
+                        continue
+                #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
+                #   add entries to Google Sheets.
+                SaveRedemptions()
+            else:
+                #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
+        #Check if the user is attempting to edit an item in the queue. Uses different permissions from displaying the queue.
+        elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " edit") 
+            and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
+                or user_id == "216768170")):
+            #This command takes 3 or more parameters: !<command_name>, an index, and attributes to edit at that index
+            if data.GetParamCount() >= 3: 
+                try:
+                    changes = False
+                    #Get the index and a set of comma-separated attributes from the message
+                    index = int(data.GetParam(2))
+                    data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):].split(",")
+                    target = Redemptions[index - 1]
+
+                    #Attempt to modify each type of attribute. Do nothing if the attribute is not found. Save only if changes happen.
+                    try:
+                        target.setUsername(GetAttribute("Username", data))
+                        changes = True
+                    except AttributeError as e:
+                        pass
+
+                    try:
+                        target.setMessage(GetAttribute("Message", data))
+                        changes = True
+                    except AttributeError as e:
+                        pass
+
+                    try:
+                        target.setGame(GetAttribute("Game", data))
+                        changes = True
+                    except AttributeError as e:
+                        pass
+                    #Save the modified redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
+                    #   modify entries in Google Sheets.
+                    if changes: SaveRedemptions() 
+                except (ValueError, IndexError) as e:
+                    if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+            else:
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
-                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
-        else:
-            if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
     
         
         
@@ -282,8 +313,6 @@ def EventReceiverRewardRedeemed(sender, e):
     reward = e.RewardTitle
     message = e.Message
 
-    
-
     if e.RewardTitle in RedemptionNames:
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(reward, message, dataUser, dataUserName)))
     return
@@ -292,6 +321,7 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
     if ScriptSettings.EnableDebug:
         Log(dataUserName + " is redeeming " + reward + " with flag information " + message)
 
+    #When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed for by scanning the message for keywords
     MessageString = str(message)
     if any (keyword in MessageString for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal"]):
         New_Game = "FF4 Free Enterprise"
@@ -312,6 +342,7 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
     else:
         New_Game = "Unknown"
 
+    #Create the new redemption object, append it to the list of redemptions, and save to file (and Google Sheets, if enabled)
     new_redemption = Redemption(Username=dataUserName, Game=New_Game, Message=message)
     Redemptions.append(new_redemption)
     SaveRedemptions()
@@ -364,6 +395,8 @@ def SaveRedemptions():
             json.dump(Redemptions, outfile, indent=4, default=lambda q: q.toJSON())
             outfile.truncate()
 
+        #Because of chatbot limitations, a secondary, external script is run to take the json file and upload
+        #   the redemption information to a Google Sheet. The settings file is shared between scripts.
         if ScriptSettings.EnableGoogleSheets: 
             if ScriptSettings.SpreadsheetID == "" or ScriptSettings.Sheet == "":
                 Log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
@@ -377,7 +410,6 @@ def LoadRedemptions():
     if os.path.exists(RedemptionsPath):
         try:
             with open(RedemptionsPath, "r") as infile:
-                # filedata = io.open(RedemptionsPath)  #Read the file data
                 objectdata = json.load(infile)    #Load the json data
 
                 #For each object/question in the objectdata, create new questions and feed them to the questions_list
@@ -392,30 +424,25 @@ def LoadRedemptions():
         open(RedemptionsPath, "w").close
 
 def GetAttribute(attribute, message):
-    # if str(message).index(str(attribute)) > -1:
-        attribute = attribute.lower() + ":"
-        #The start index of the attribute begins at the end of the attribute designator, such as "game:"
-        try:
-            index_of_beginning_of_attribute = message.lower().index(attribute) + len(attribute)
-        except ValueError as e:
-            raise e
-        #The end index of the attribute is at the last space before the next attribute designator, or at the end of the message
-        try:
-            index_of_end_of_attribute = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + message[index_of_beginning_of_attribute:].index(":")].rindex(",")
-        except ValueError:
-            #If this error is thrown, the end of the message was hit, so just return all of the remaining message
-            return message[index_of_beginning_of_attribute:].strip()
-        return message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
-    # else:
-    #     raise AttributeError(str(attribute) + " was not found in the supplied information.")
+    attribute = attribute.lower() + ":"
+    #The start index of the attribute begins at the end of the attribute designator, such as "game:"
+    try:
+        index_of_beginning_of_attribute = message.lower().index(attribute) + len(attribute)
+    except ValueError as e:
+        raise e
+    #The end index of the attribute is at the last space before the next attribute designator, or at the end of the message
+    try:
+        index_of_end_of_attribute = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + message[index_of_beginning_of_attribute:].index(":")].rindex(",")
+    except ValueError:
+        #If this error is thrown, the end of the message was hit, so just return all of the remaining message
+        return message[index_of_beginning_of_attribute:].strip()
+    return message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
 
 def GetUserID(rawdata):
+    #Retrieves the user ID of a Twitch chatter using the raw data returned from Twitch
     try:
         rawdata = rawdata[rawdata.index("user-id=") + len("user-id="):]
         rawdata = rawdata[:rawdata.index(";")]
     except Exception:
         return ""
     return rawdata
-
-def testing():
-    pass
