@@ -13,7 +13,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.1.3-Beta"
+Version = "1.1.4-Beta"
 
 #   Define Global Variables <Required>
 ScriptPath = os.path.dirname(__file__)
@@ -22,7 +22,6 @@ SettingsPath = os.path.join(ScriptPath, "settings.json")
 ReadmePath = os.path.join(ScriptPath, "Readme.md")
 ScriptSettings = None
 
-RedemptionNames = []
 Redemptions = []
 RedemptionsPath = os.path.join(ScriptPath, "redemptions.json")
 
@@ -78,11 +77,8 @@ class Settings(object):
             self.SpreadsheetID = ""
             self.Sheet = ""
 
-            RedemptionNames = [name.strip() for name in self.TwitchRewardNames.split(",")]
-
     def Reload(self, jsondata):
         self.__dict__ = json.loads(jsondata, encoding="utf-8")
-        RedemptionNames = [name.strip() for name in self["TwitchRewardNames"].split(",")]
         return
 
     def Save(self, SettingsPath):
@@ -100,12 +96,13 @@ def Execute(data):
     #Check if the streamer is live. Still run commands if the script is set to run while offline
     if Parent.IsLive() or not ScriptSettings.RunCommandsOnlyWhenLive:
         #Check if the message begins with "!" and the command name AND the user has permissions to run the command
-        if (str(data.Message).startswith("!" + ScriptSettings.CommandName) 
+        if (str(data.Message).startswith("!" + ScriptSettings.CommandName) and data.GetParamCount() == 1
             and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "")                                                 
                 or user_id == "216768170")):
             #If the user is using Google Sheets, post a link to the Google Sheet in chat
             if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
                 Post("https://docs.google.com/spreadsheets/d/" + ScriptSettings.SpreadsheetID)
+                return
             #If the user is not using Google Sheets, read lines from the json file in the script directory
             else:
                 if len(Redemptions) > 0:
@@ -150,6 +147,7 @@ def Execute(data):
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   remove entries from Google Sheets.
                 SaveRedemptions()
+                if ScriptSettings.EnableResponses: Post("Redemption(s) successfully removed from the queue.")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
@@ -185,6 +183,7 @@ def Execute(data):
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   add entries to Google Sheets.
                 SaveRedemptions()
+                if ScriptSettings.EnableResponses: Post("Redemption(s) successfully added to the queue.")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
@@ -221,15 +220,14 @@ def Execute(data):
                         pass
                     #Save the modified redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                     #   modify entries in Google Sheets.
-                    if changes: SaveRedemptions() 
+                    if changes: 
+                        SaveRedemptions() 
+                        if ScriptSettings.EnableResponses: Post("Queue successfully modified.")
                 except (ValueError, IndexError) as e:
                     if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
             else:
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
     
-        
-        
-
 #   [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
     global PlayNextAt
@@ -270,7 +268,7 @@ def Init():
     global ScriptSettings
     ScriptSettings = Settings(SettingsPath)
     ScriptSettings.Save(SettingsPath)
-
+    
     #Initialize Redemption Receiver
     Start()
     LoadRedemptions()
@@ -313,7 +311,11 @@ def EventReceiverRewardRedeemed(sender, e):
     reward = e.RewardTitle
     message = e.Message
 
-    if e.RewardTitle in RedemptionNames:
+    Log("Redeemed reward title:" + str(e.RewardTitle.lower()))
+    Log("Rewards in settings:" + str([name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]))
+    
+    
+    if e.RewardTitle.lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(reward, message, dataUser, dataUserName)))
     return
 
@@ -346,6 +348,7 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
     new_redemption = Redemption(Username=dataUserName, Game=New_Game, Message=message)
     Redemptions.append(new_redemption)
     SaveRedemptions()
+    if ScriptSettings.EnableResponses: Post("Thank you for redeeming " + reward + ", " + dataUserName + ". Your game has been added to the queue.")
     
     global PlayNextAt
     PlayNextAt = datetime.datetime.now() + datetime.timedelta(0, 0)
