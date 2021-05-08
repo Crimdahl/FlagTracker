@@ -13,14 +13,16 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.1.4-Beta"
+Version = "1.2.0-Beta"
 
 #   Define Global Variables <Required>
 ScriptPath = os.path.dirname(__file__)
 GoogleUpdaterPath = os.path.join(ScriptPath, "GoogleSheetsUpdater.exe")
 SettingsPath = os.path.join(ScriptPath, "settings.json")
 ReadmePath = os.path.join(ScriptPath, "Readme.md")
+LogPath = os.path.join(ScriptPath, "flagtrackerlog.txt")
 ScriptSettings = None
+LogFile = None
 
 Redemptions = []
 RedemptionsPath = os.path.join(ScriptPath, "redemptions.json")
@@ -99,12 +101,15 @@ def Execute(data):
         if (str(data.Message).startswith("!" + ScriptSettings.CommandName) and data.GetParamCount() == 1
             and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "")                                                 
                 or user_id == "216768170")):
+            LogToFile("Base command received.")
             #If the user is using Google Sheets, post a link to the Google Sheet in chat
             if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
+                LogToFile("Displaying Google Sheets link in chat.")
                 Post("https://docs.google.com/spreadsheets/d/" + ScriptSettings.SpreadsheetID)
                 return
             #If the user is not using Google Sheets, read lines from the json file in the script directory
             else:
+                LogToFile("Iterating through redemptions to display them in chat.")
                 if len(Redemptions) > 0:
                     #An index is displayed with each line. The index can be referenced with other commands.
                     index = 1
@@ -124,8 +129,10 @@ def Execute(data):
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
                 or user_id == "216768170")):
+            LogToFile("Redemption removal command received.")
             #Check if the supplied information has three or more parameters: !command, remove, and one or more indices
             if data.GetParamCount() >= 3: 
+                LogToFile("Attempting to remove the redemption(s)")
                 DataString = str(data.Message)
                 #Separate the indices from the rest of the message and split them by comma delimiter
                 DataArray = DataString[DataString.index("remove") + len("remove"):].replace(" ","").split(",")
@@ -147,16 +154,20 @@ def Execute(data):
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   remove entries from Google Sheets.
                 SaveRedemptions()
+                LogToFile("Redemptions removed.")
                 if ScriptSettings.EnableResponses: Post("Redemption(s) successfully removed from the queue.")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                LogToFile("Removal command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
         #Check if the user is attempting to add an item to the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " add") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
                 or user_id == "216768170")):
+            LogToFile("Redemption addition command received.")
             #Check if the supplied information has three or more parameters: !command, add, and one or more sets of information
             if data.GetParamCount() >= 3: 
+                LogToFile("Attempting to add redemption(s)")
                 DataString = str(data.Message)
                 #Separate the information sets from the rest of the message and split them by pipe delimiter
                 DataArray = DataString[DataString.index("add") + len("add"):].split("|")
@@ -183,16 +194,20 @@ def Execute(data):
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   add entries to Google Sheets.
                 SaveRedemptions()
+                LogToFile("Redemption(s) successfully added.")
                 if ScriptSettings.EnableResponses: Post("Redemption(s) successfully added to the queue.")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                LogToFile("Addition command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
         #Check if the user is attempting to edit an item in the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " edit") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
                 or user_id == "216768170")):
+            LogToFile("Redemption modification command received.")
             #This command takes 3 or more parameters: !<command_name>, an index, and attributes to edit at that index
             if data.GetParamCount() >= 3: 
+                LogToFile("Attempting to modify redemption(s).")
                 try:
                     changes = False
                     #Get the index and a set of comma-separated attributes from the message
@@ -222,10 +237,14 @@ def Execute(data):
                     #   modify entries in Google Sheets.
                     if changes: 
                         SaveRedemptions() 
+                        LogToFile("Redemption(s) successfully modified.")
                         if ScriptSettings.EnableResponses: Post("Queue successfully modified.")
+                    else:
+                        LogToFile("No changes were made to any redemptions.")
                 except (ValueError, IndexError) as e:
                     if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
             else:
+                LogToFile("Modification command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
     
 #   [Required] Tick method (Gets called during every iteration even when there is no incoming data)
@@ -247,6 +266,7 @@ def Tick():
     
 #   Reload settings and receiver when clicking Save Settings in the Chatbot
 def ReloadSettings(jsonData):
+    LogToFile("Attempting to save settings.")
     if ScriptSettings.EnableDebug: Log("Saving settings.")
     global EventReceiver
     try:
@@ -256,16 +276,18 @@ def ReloadSettings(jsonData):
 
         Unload()
         Start()
+        LogToFile("Settings saved successfully.")
         if ScriptSettings.EnableDebug: Log("Settings saved successfully")
     except Exception as e:
+        LogToFile("ERROR while saving settings: " + str(e.message))
         if ScriptSettings.EnableDebug: Log(str(e))
-
     return
 
 #   Init called on script load. <Required>
 def Init():
     #Initialize Settings
     global ScriptSettings
+    LogToFile("\n\n")
     ScriptSettings = Settings(SettingsPath)
     ScriptSettings.Save(SettingsPath)
     
@@ -275,17 +297,19 @@ def Init():
     return
 
 def Start():
+    LogToFile("Starting channel point redemption receiver.")
     if ScriptSettings.EnableDebug: Log("Starting receiver")
 
     global EventReceiver
     EventReceiver = TwitchPubSub()
     EventReceiver.OnPubSubServiceConnected += EventReceiverConnected
     EventReceiver.OnRewardRedeemed += EventReceiverRewardRedeemed
-
+    
     EventReceiver.Connect()
     return
 
 def EventReceiverConnected(sender, e):
+    LogToFile("Redemption event receiver connecting...")
     if ScriptSettings.EnableDebug: Log("Event receiver connecting")
     #  Get Channel ID for Username
     headers = {
@@ -293,10 +317,12 @@ def EventReceiverConnected(sender, e):
         "Authorization": "Bearer " + ScriptSettings.TwitchOAuthToken
     }
     result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" + Parent.GetChannelName(), headers))
+    LogToFile("Result of connection attempt: " + str(result))
     if ScriptSettings.EnableDebug: Log("result: " + str(result))
     user = json.loads(result["response"])
     id = user["data"][0]["id"]
 
+    LogToFile("Event receiver connected, sending topics for channel id: " + id)
     if ScriptSettings.EnableDebug: Log("Event receiver connected, sending topics for channel id: " + id)
 
     EventReceiver.ListenToRewards(id)
@@ -304,6 +330,7 @@ def EventReceiverConnected(sender, e):
     return
 
 def EventReceiverRewardRedeemed(sender, e):
+    LogToFile("Redemption event triggered.")
     if ScriptSettings.EnableDebug: Log("Event triggered")
 
     dataUser = e.Login
@@ -311,10 +338,11 @@ def EventReceiverRewardRedeemed(sender, e):
     reward = e.RewardTitle
     message = e.Message
 
+    LogToFile("Redeemed reward title:" + str(e.RewardTitle.lower()))
     Log("Redeemed reward title:" + str(e.RewardTitle.lower()))
-    Log("Rewards in settings:" + str([name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]))
+    #Log("Rewards in settings:" + str([name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]))
     
-    
+    LogToFile("Starting thread to handle the redemption.")
     if e.RewardTitle.lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(reward, message, dataUser, dataUserName)))
     return
@@ -345,8 +373,11 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
         New_Game = "Unknown"
 
     #Create the new redemption object, append it to the list of redemptions, and save to file (and Google Sheets, if enabled)
+    LogToFile("Creating new redemption object.")
     new_redemption = Redemption(Username=dataUserName, Game=New_Game, Message=message)
+    LogToFile("Object created. Appending object to redemptions list.")
     Redemptions.append(new_redemption)
+    LogToFile("Saving redemptions.")
     SaveRedemptions()
     if ScriptSettings.EnableResponses: Post("Thank you for redeeming " + reward + ", " + dataUserName + ". Your game has been added to the queue.")
     
@@ -356,10 +387,12 @@ def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
 
 def Unload():
     # Disconnect EventReceiver cleanly
+    LogToFile("Redemption event listener being unloaded.")
     try:
         global EventReceiver
         if EventReceiver:
             EventReceiver.Disconnect()
+            LogToFile("Redemption event listener unloaded.")
             EventReceiver = None
     except:
         if ScriptSettings.EnableDebug: Log("Event receiver already disconnected")
@@ -368,17 +401,25 @@ def Unload():
 
 #   Opens readme file <Optional - DO NOT RENAME>
 def openreadme():
+    LogToFile("Opening readme file.")
     os.startfile(ReadmePath)
     return
 
 #   Opens Twitch.TV website to ask permissions
 def GetToken(): 
+    LogToFile("Opening twitch web page to authenticate.")
     os.startfile("https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=7a4xexuuxvxw5jmb9httrqq9926frq&redirect_uri=https://twitchapps.com/tokengen/&scope=channel:read:redemptions&force_verify=true")
     return
 
 #   Helper method to log
 def Log(message): 
     Parent.Log(ScriptName, message)
+
+def LogToFile(line):
+    global LogFile
+    LogFile = open(LogPath, "a+")
+    LogFile.writelines(str(datetime.datetime.now()) + " " + line + "\n")
+    LogFile.close()
 
 #   Helper method to post to Twitch Chat
 def Post(message):
@@ -388,41 +429,53 @@ def SaveRedemptions():
     try:        
         #if the redemptions file does not exist, create it
         if not os.path.exists(RedemptionsPath):
+            LogToFile("Redemptions.json did not exist. ")
             with io.open(RedemptionsPath, 'w') as outfile:
                 outfile.write(json.dumps({}))
+                LogToFile("Redemptions.json has been created.")
 
-        #record the questions
+        #record the redemptions
+        LogToFile("Writing redemption objects to redemptions.json file.")
         with open (RedemptionsPath, 'w') as outfile:
             outfile.seek(0)
             #When writing the Questions to disk, use the Question.toJSON() function
             json.dump(Redemptions, outfile, indent=4, default=lambda q: q.toJSON())
             outfile.truncate()
+            LogToFile("Redemption objects written to redemptions.json.")
 
         #Because of chatbot limitations, a secondary, external script is run to take the json file and upload
         #   the redemption information to a Google Sheet. The settings file is shared between scripts.
         if ScriptSettings.EnableGoogleSheets: 
+            LogToFile("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
             if ScriptSettings.SpreadsheetID == "" or ScriptSettings.Sheet == "":
                 Log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
                 return
-        os.system(GoogleUpdaterPath)
+            os.system(GoogleUpdaterPath)
     except OSError as e:
         Log("ERROR: Unable to save redemptions! " + e.message)
 
 def LoadRedemptions():
     #Ensure the questions file exists
+    LogToFile("Loading redemptions from redemptions.json.")
     if os.path.exists(RedemptionsPath):
+        LogToFile("Redemptions.json detected. Opening.")
         try:
             with open(RedemptionsPath, "r") as infile:
+                LogToFile("Loading object data from redemptions.json.")
                 objectdata = json.load(infile)    #Load the json data
 
                 #For each object/question in the objectdata, create new questions and feed them to the questions_list
+                LogToFile("Creating redemption objects from the object data.")
                 for redemption in objectdata:
                     Redemptions.append(Redemption(Username=redemption["Username"], Game=redemption["Game"], Message=redemption["Message"]))
+                LogToFile("Redemptions successfully loaded from redemptions.json")
                 if ScriptSettings.EnableDebug: Log("Redemptions loaded: " + str(len(Redemptions)))
-        except ValueError:
-            if ScriptSettings.EnableDebug: Log("ERROR: Unable to read redemptions file! " + e.message)
+        except Exception as e:
+            LogToFile("ERROR loading redemptions from redemptions.json: " + str(e.message))
+            if ScriptSettings.EnableDebug: Log("ERROR loading redemptions from redemptions.json: " + str(e.message))
 
     else:
+        LogToFile("No redemptions file detected. Creating one.")
         if ScriptSettings.EnableDebug: Log("WARNING: No redemptions file exists. Creating one.")
         open(RedemptionsPath, "w").close
 
