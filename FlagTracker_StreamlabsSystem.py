@@ -142,20 +142,19 @@ def Execute(data):
                 if ScriptSettings.EnableDebug: Log("Removing the following indexes from Redemptions: " + str(DataArray))
                 #Keep track of the number of indices removed because we have to subtract that number from the supplied indices
                 RemovedCount = 1
-                for num in DataArray:
-                    try:
+                try:
+                    for num in DataArray:
                         #The indices in the redemptions are 0-based, so we can immediately subtract 1 from any user-supplied indices
                         Redemptions.pop(int(num) - RemovedCount)
                         RemovedCount = RemovedCount + 1
-                    except (ValueError, IndexError) as e:
-                        #Log an error if the index is either a non-integer or is outside of the range of the redemptions
-                        if ScriptSettings.EnableDebug: Log("Error handled by remove: " + e.message)
-                        continue
-                #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
-                #   remove entries from Google Sheets.
-                SaveRedemptions()
-                LogToFile("Redemptions removed.")
-                if ScriptSettings.EnableResponses: Post("Redemption(s) successfully removed from the queue.")
+                    SaveRedemptions()
+                    LogToFile("Redemptions removed.")
+                    if ScriptSettings.EnableResponses: Post("Redemption(s) successfully removed from the queue.")
+                except (ValueError, IndexError) as e:
+                    #Log an error if the index is either a non-integer or is outside of the range of the redemptions
+                    if ScriptSettings.EnableDebug: Log("Error handled by remove: " + e.message)
+                    if isinstance(e, IndexError):
+                        if ScriptSettings.EnableResponses: Post("Error: Supplied index was out of range. The valid range is 1-" + str(len(Redemptions)) + ".")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
                 LogToFile("Removal command did not have enough parameters. Displaying usage.")
@@ -171,6 +170,7 @@ def Execute(data):
                 DataString = str(data.Message)
                 #Separate the information sets from the rest of the message and split them by pipe delimiter
                 DataArray = DataString[DataString.index("add") + len("add"):].split("|")
+                redemptions_added = 0
                 for info in DataArray:
                     if ScriptSettings.EnableDebug: Log("Adding new redemption via add command: " + str(info))
                     #Create a redemption object with the Username, Message, and Game
@@ -178,24 +178,36 @@ def Execute(data):
                         #Username is mandatory
                         NewUser = GetAttribute("Username", info)
                         #Message is optional
+                        NewMessage = "No message."
                         try:
                             NewMessage = GetAttribute("Message", info)
-                        except AttributeError:
-                            newMessage = "No message."
+                        except (AttributeError, ValueError):
+                            pass
                         #Game is optional
+                        NewGame = "Unknown"
                         try:
                             NewGame = GetAttribute("Game", info)
-                        except AttributeError:
-                            NewGame = "Unknown"
-                        Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
-                    except (AttributeError) as e:
+                        except (AttributeError, ValueError):
+                            pass
+
+                        if "index:" in info:
+                            Redemptions.insert(int(GetAttribute("Index", info)) - 1, Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
+                            redemptions_added = redemptions_added + 1
+                        else:        
+                            Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
+                            redemptions_added = redemptions_added + 1
+                    except (AttributeError, ValueError) as e:
                         if ScriptSettings.EnableDebug: Log("Error handled by add: " + e.message)
                         continue
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   add entries to Google Sheets.
-                SaveRedemptions()
-                LogToFile("Redemption(s) successfully added.")
-                if ScriptSettings.EnableResponses: Post("Redemption(s) successfully added to the queue.")
+                if redemptions_added > 0:
+                    SaveRedemptions()
+                    LogToFile("Redemption(s) successfully added.")
+                    if ScriptSettings.EnableResponses: Post("Successfully added " + str(redemptions_added) + " redemption(s) to the queue.")
+                else:
+                    LogToFile("ERROR: Failed to add redemption(s) to the queue.")
+                    if ScriptSettings.EnableResponses: Post("Failed to add redemptions to the queue.")
             else:
                 #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
                 LogToFile("Addition command did not have enough parameters. Displaying usage.")
@@ -207,32 +219,41 @@ def Execute(data):
             LogToFile("Redemption modification command received.")
             #This command takes 3 or more parameters: !<command_name>, an index, and attributes to edit at that index
             if data.GetParamCount() >= 3: 
-                LogToFile("Attempting to modify redemption(s).")
                 try:
                     changes = False
                     #Get the index and a set of comma-separated attributes from the message
                     index = int(data.GetParam(2))
+                    Log("Index of edit:" + str(index))
                     data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):].split(",")
+                    Log("Data of edit:" + str(data))
                     target = Redemptions[index - 1]
 
                     #Attempt to modify each type of attribute. Do nothing if the attribute is not found. Save only if changes happen.
-                    try:
-                        target.setUsername(GetAttribute("Username", data))
-                        changes = True
-                    except AttributeError as e:
-                        pass
-
-                    try:
-                        target.setMessage(GetAttribute("Message", data))
-                        changes = True
-                    except AttributeError as e:
-                        pass
-
-                    try:
-                        target.setGame(GetAttribute("Game", data))
-                        changes = True
-                    except AttributeError as e:
-                        pass
+                    for attribute in data:
+                        if "username" in attribute.lower():
+                            try:
+                                Log("Attempting to change username attribute.")
+                                target.setUsername(GetAttribute("Username", attribute))
+                                changes = True
+                                Log("Username attribute changed.")
+                            except (AttributeError, ValueError) as e:
+                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                        if "message" in attribute.lower():
+                            try:
+                                Log("Attempting to change Message attribute.")
+                                target.setMessage(GetAttribute("Message", attribute))
+                                changes = True
+                                Log("Message attribute changed.")
+                            except (AttributeError, ValueError) as e:
+                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                        if "game" in attribute.lower():
+                            try:
+                                Log("Attempting to change Game attribute.")
+                                target.setGame(GetAttribute("Game", attribute))
+                                changes = True
+                                Log("Game attribute changed.")
+                            except (AttributeError, ValueError) as e:
+                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
                     #Save the modified redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                     #   modify entries in Google Sheets.
                     if changes: 
