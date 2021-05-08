@@ -7,23 +7,28 @@ from google.oauth2.credentials import Credentials
 
 chatbot_path = os.path.dirname(os.path.abspath(__file__))
 script_path = os.path.join(chatbot_path, "Services\Scripts\FlagTracker")
-settings_path = os.path.join(script_path, "settings.json")
-redemptions_path = os.path.join(script_path, "redemptions.json")
-token_path = os.path.join(script_path, "token.json")
-#credentials_path = os.path.join(script_path, "credentials.json")
-log_path = os.path.join(script_path, "googlesheetsupdaterlog.txt")
-#log_file = None
+settings_path = "settings.json"
+redemptions_path = "redemptions.json"
+token_path = "token.json"
+log_path = "googlesheetsupdaterlog.txt"
+#settings_path = os.path.join(script_path, "settings.json")
+#redemptions_path = os.path.join(script_path, "redemptions.json")
+#token_path = os.path.join(script_path, "token.json")
+#log_path = os.path.join(script_path, "googlesheetsupdaterlog.txt")
+log_file = None
 
 API_path = None
 if hasattr(sys, "_MEIPASS"):
     API_path = os.path.join(sys._MEIPASS, "sheets.v4.json")
 else:
-    API_path = os.path.join(script_path, "sheets.v4.json")
+    API_path = "sheets.v4.json"
+    #API_path = os.path.join(script_path, "sheets.v4.json")
 
 if hasattr(sys, "_MEIPASS"):
     credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
 else:
-    credentials_path = os.path.join(script_path, "credentials.json")
+    credentials_path = "credentials.json"
+    #credentials_path = os.path.join(script_path, "credentials.json")
 
 def loadRedemptions():
     log("Attempting to load redemptions file.")
@@ -32,7 +37,7 @@ def loadRedemptions():
             return json.load(infile)    #Load the json data
             log("Redemptions file loaded.")
     else:
-        log("Error loading redemptions file at " + redemptions_path)
+        raise IOError("Error loading redemptions file " + redemptions_path + " Is the updater in the script directory with the redemptions.json file? " + str(e))
 
 def loadSettings():
     log("Attempting to load settings file.")
@@ -41,15 +46,19 @@ def loadSettings():
             return json.load(f)
             log("Settings file loaded.")
     else:
-        log("Error loading settings file at " + settings_path)
+        raise IOError("Error loading settings file " + settings_path + " Is the updater in the script directory with the settings.json file?")
 
 def main():
     global chatbot_path
     global script_path
     global log_file
-    log_file = open(log_path, "a+")
     try:
-        log_file.write("\n\n")
+        try:
+            log_file = open(log_path, "a+")
+        except IOError as e:
+            log("IOError when creating log file. Is the script directory accurate? " + str(e))
+            
+        if log_file: log_file.write("\n\n")
         log("Chatbot path: " + chatbot_path)
         log("Script path: " + script_path)
         log("Settings path: " + settings_path)
@@ -76,16 +85,14 @@ def main():
         if "SpreadsheetID" in settings.keys():
             spreadsheet_id = settings["SpreadsheetID"]
         else:
-            log("No SpreadsheetID existed in config.json. Please add your spreadsheet's ID in the chatbot settings.")
-            raise AttributeError("No spreadsheet ID existed in the settings file.")
+            raise AttributeError("No Spreadsheet ID existed in settings.json. Please add your spreadsheet's ID in the chatbot settings.")
         log("Spreadsheet ID is " + spreadsheet_id)
 
         log("Getting Sheet Name.")
         if "Sheet" in settings:
             cell_range = str(settings["Sheet"]) + "!A:C"
         else:
-            log("No Sheet Name existed in config.json. Please add your sheet's name in the chatbot settings.")
-            raise AttributeError("No Sheet Name existed in the settings file.")
+            raise AttributeError("No Sheet Name existed in settings.json. Please add your sheet's name in the chatbot settings.")
         log("Sheet Name and cell range is " + cell_range)
 
         log("Attempting to sync redemptions.json with your Google Sheet.")
@@ -139,17 +146,22 @@ def main():
         else:
             log("There were no redemptions.")
     finally:
-        log_file.close()
+        if log_file: log_file.close()
 
 def log(line):
     global log_file
-
-    log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
+    try:
+        print(line)
+        if log_file: log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
+    except Exception as e:
+        pass
 
 if __name__ == '__main__':
     try:
         main()
+        input("Success? Press any key to exit.")
     except Exception as e:
-        print(str(e.message))
+        print(str(e))
+        input("Press any key to exit.")
         
     
