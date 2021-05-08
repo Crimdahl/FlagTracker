@@ -1,4 +1,5 @@
 /FlagTracker/*
+/Releases/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -147,3 +148,5 @@ FlagTracker/References/Newtonsoft.Json.xml
 FlagTracker/References/TwitchLib.Communication.dll
 FlagTracker/References/TwitchLib.PubSub.dll
 FlagTracker/UI_Config.json
+token.json
+googlesheetsupdaterlog.txt

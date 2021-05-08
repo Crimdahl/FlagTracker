@@ -420,7 +420,7 @@ def LoadRedemptions():
                     Redemptions.append(Redemption(Username=redemption["Username"], Game=redemption["Game"], Message=redemption["Message"]))
                 if ScriptSettings.EnableDebug: Log("Redemptions loaded: " + str(len(Redemptions)))
         except ValueError:
-            if ScriptSettings.EnableDebug: Log("Redemptions file exists, but contains no data.")
+            if ScriptSettings.EnableDebug: Log("ERROR: Unable to read redemptions file! " + e.message)
 
     else:
         if ScriptSettings.EnableDebug: Log("WARNING: No redemptions file exists. Creating one.")
