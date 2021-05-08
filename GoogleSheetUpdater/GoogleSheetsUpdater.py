@@ -5,16 +5,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-chatbot_path = os.path.dirname(os.path.abspath(__file__))
-script_path = os.path.join(chatbot_path, "Services\Scripts\FlagTracker")
-settings_path = "settings.json"
-redemptions_path = "redemptions.json"
-token_path = "token.json"
-log_path = "googlesheetsupdaterlog.txt"
-#settings_path = os.path.join(script_path, "settings.json")
-#redemptions_path = os.path.join(script_path, "redemptions.json")
-#token_path = os.path.join(script_path, "token.json")
-#log_path = os.path.join(script_path, "googlesheetsupdaterlog.txt")
+script_run_path = os.path.dirname(os.path.abspath(__file__))
+if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
+    streamlabs_script_path = os.path.join(script_run_path, "Services\Scripts\FlagTracker")
+else:
+    streamlabs_script_path = script_run_path
+settings_path = os.path.join(streamlabs_script_path, "settings.json")
+redemptions_path = os.path.join(streamlabs_script_path, "redemptions.json")
+token_path = os.path.join(streamlabs_script_path, "token.json")
+log_path = os.path.join(streamlabs_script_path, "googlesheetsupdaterlog.txt")
 log_file = None
 
 API_path = None
@@ -22,13 +21,13 @@ if hasattr(sys, "_MEIPASS"):
     API_path = os.path.join(sys._MEIPASS, "sheets.v4.json")
 else:
     API_path = "sheets.v4.json"
-    #API_path = os.path.join(script_path, "sheets.v4.json")
+    #API_path = os.path.join(streamlabs_script_path, "sheets.v4.json")
 
 if hasattr(sys, "_MEIPASS"):
     credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
 else:
     credentials_path = "credentials.json"
-    #credentials_path = os.path.join(script_path, "credentials.json")
+    #credentials_path = os.path.join(streamlabs_script_path, "credentials.json")
 
 def loadRedemptions():
     log("Attempting to load redemptions file.")
@@ -49,8 +48,8 @@ def loadSettings():
         raise IOError("Error loading settings file " + settings_path + " Is the updater in the script directory with the settings.json file?")
 
 def main():
-    global chatbot_path
-    global script_path
+    global script_run_path
+    global streamlabs_script_path
     global log_file
     try:
         try:
@@ -59,8 +58,8 @@ def main():
             log("IOError when creating log file. Is the script directory accurate? " + str(e))
             
         if log_file: log_file.write("\n\n")
-        log("Chatbot path: " + chatbot_path)
-        log("Script path: " + script_path)
+        log("Script path: " + script_run_path)
+        log("Streamlabs Script path: " + streamlabs_script_path)
         log("Settings path: " + settings_path)
         log("Redemptions path: " + redemptions_path)
         log("API path: " + API_path)
@@ -80,7 +79,7 @@ def main():
         cell_range = ""
         api_scope = ['https://www.googleapis.com/auth/spreadsheets']
 
-        log("Script Path is " + script_path)
+        log("Script Path is " + streamlabs_script_path)
         log("Getting Spreadsheet ID from " + settings_path)
         if "SpreadsheetID" in settings.keys():
             spreadsheet_id = settings["SpreadsheetID"]
