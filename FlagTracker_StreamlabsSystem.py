@@ -87,8 +87,8 @@ class Settings(object):
         try:
             with codecs.open(SettingsPath, encoding="utf-8-sig", mode="w+") as f:
                 json.dump(self.__dict__, f, encoding="utf-8")
-        except:
-            Log("Failed to save settings to the file. Fix error and try again")
+        except Exception as e:
+            Log("Failed to save settings to the file: " + str(e))
         return
 
 #   Process messages <Required>
@@ -114,7 +114,6 @@ def Execute(data):
                     #An index is displayed with each line. The index can be referenced with other commands.
                     index = 1
                     for redemption in Redemptions:
-                        Log(redemption.Game)
                         if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game == "Unknown":
                             Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
                         else:
@@ -152,7 +151,7 @@ def Execute(data):
                     if ScriptSettings.EnableResponses: Post("Redemption(s) successfully removed from the queue.")
                 except (ValueError, IndexError) as e:
                     #Log an error if the index is either a non-integer or is outside of the range of the redemptions
-                    if ScriptSettings.EnableDebug: Log("Error handled by remove: " + e.message)
+                    if ScriptSettings.EnableDebug: Log("Error encountered when removing redemptions: " + e.message)
                     if isinstance(e, IndexError):
                         if ScriptSettings.EnableResponses: Post("Error: Supplied index was out of range. The valid range is 1-" + str(len(Redemptions)) + ".")
             else:
@@ -197,7 +196,7 @@ def Execute(data):
                             Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
                             redemptions_added = redemptions_added + 1
                     except (AttributeError, ValueError) as e:
-                        if ScriptSettings.EnableDebug: Log("Error handled by add: " + e.message)
+                        if ScriptSettings.EnableDebug: Log("Error encountered when adding redemptions: " + e.message)
                         continue
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   add entries to Google Sheets.
@@ -223,37 +222,29 @@ def Execute(data):
                     changes = False
                     #Get the index and a set of comma-separated attributes from the message
                     index = int(data.GetParam(2))
-                    Log("Index of edit:" + str(index))
                     data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):].split(",")
-                    Log("Data of edit:" + str(data))
                     target = Redemptions[index - 1]
 
                     #Attempt to modify each type of attribute. Do nothing if the attribute is not found. Save only if changes happen.
                     for attribute in data:
                         if "username" in attribute.lower():
                             try:
-                                Log("Attempting to change username attribute.")
                                 target.setUsername(GetAttribute("Username", attribute))
                                 changes = True
-                                Log("Username attribute changed.")
                             except (AttributeError, ValueError) as e:
-                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                                if ScriptSettings.EnableDebug: Log("Error encountered when editing redemption username: " + e.message)
                         if "message" in attribute.lower():
                             try:
-                                Log("Attempting to change Message attribute.")
                                 target.setMessage(GetAttribute("Message", attribute))
                                 changes = True
-                                Log("Message attribute changed.")
                             except (AttributeError, ValueError) as e:
-                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                                if ScriptSettings.EnableDebug: Log("Error encountered when editing redemption message: " + e.message)
                         if "game" in attribute.lower():
                             try:
-                                Log("Attempting to change Game attribute.")
                                 target.setGame(GetAttribute("Game", attribute))
                                 changes = True
-                                Log("Game attribute changed.")
                             except (AttributeError, ValueError) as e:
-                                if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                                if ScriptSettings.EnableDebug: Log("Error encountered when editing redemption game: " + e.message)
                     #Save the modified redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                     #   modify entries in Google Sheets.
                     if changes: 
@@ -263,7 +254,7 @@ def Execute(data):
                     else:
                         LogToFile("No changes were made to any redemptions.")
                 except (ValueError, IndexError) as e:
-                    if ScriptSettings.EnableDebug: Log("Error handled by edit: " + e.message)
+                    if ScriptSettings.EnableDebug: Log("Error encountered when editing redemption: " + e.message)
             else:
                 LogToFile("Modification command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
@@ -279,7 +270,6 @@ def Tick():
         Thread = None
 
     if Thread == None and len(ThreadQueue) > 0:
-        if ScriptSettings.EnableDebug: Log("Starting new thread. " + str(PlayNextAt))
         Thread = ThreadQueue.pop(0)
         Thread.start()
 
@@ -287,8 +277,8 @@ def Tick():
     
 #   Reload settings and receiver when clicking Save Settings in the Chatbot
 def ReloadSettings(jsonData):
-    LogToFile("Attempting to save settings.")
-    if ScriptSettings.EnableDebug: Log("Saving settings.")
+    LogToFile("Saving new settings from SL Chatbot GUI.")
+    if ScriptSettings.EnableDebug: Log("Saving new settings from SL Chatbot GUI.")
     global EventReceiver
     try:
         #Reload settings
@@ -297,11 +287,11 @@ def ReloadSettings(jsonData):
 
         Unload()
         Start()
-        LogToFile("Settings saved successfully.")
-        if ScriptSettings.EnableDebug: Log("Settings saved successfully")
+        LogToFile("Settings saved and applied successfully.")
+        if ScriptSettings.EnableDebug: Log("Settings saved and applied successfully")
     except Exception as e:
-        LogToFile("ERROR while saving settings: " + str(e.message))
-        if ScriptSettings.EnableDebug: Log(str(e))
+        LogToFile("Error encountered when saving settings: " + str(e))
+        if ScriptSettings.EnableDebug: Log("Error encountered when saving settings: " + str(e))
     return
 
 #   Init called on script load. <Required>
@@ -318,8 +308,8 @@ def Init():
     return
 
 def Start():
-    LogToFile("Starting channel point redemption receiver.")
-    if ScriptSettings.EnableDebug: Log("Starting receiver")
+    LogToFile("Initializing receiver and connecting to Twitch channel")
+    if ScriptSettings.EnableDebug: Log("Initializing receiver and connecting to Twitch channel")
 
     global EventReceiver
     EventReceiver = TwitchPubSub()
@@ -330,66 +320,63 @@ def Start():
     return
 
 def EventReceiverConnected(sender, e):
-    LogToFile("Redemption event receiver connecting...")
-    if ScriptSettings.EnableDebug: Log("Event receiver connecting")
     #  Get Channel ID for Username
     headers = {
         "Client-ID": "7a4xexuuxvxw5jmb9httrqq9926frq",
         "Authorization": "Bearer " + ScriptSettings.TwitchOAuthToken
     }
     result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" + Parent.GetChannelName(), headers))
-    LogToFile("Result of connection attempt: " + str(result))
-    if ScriptSettings.EnableDebug: Log("result: " + str(result))
+    LogToFile("Connection result: " + str(result))
+    if ScriptSettings.EnableDebug: Log("Connection result: " + str(result))
     user = json.loads(result["response"])
     id = user["data"][0]["id"]
-
-    LogToFile("Event receiver connected, sending topics for channel id: " + id)
-    if ScriptSettings.EnableDebug: Log("Event receiver connected, sending topics for channel id: " + id)
 
     EventReceiver.ListenToRewards(id)
     EventReceiver.SendTopics(ScriptSettings.TwitchOAuthToken)
     return
 
 def EventReceiverRewardRedeemed(sender, e):
-    LogToFile("Redemption event triggered.")
-    if ScriptSettings.EnableDebug: Log("Event triggered")
+    event_status = str(e.Status)
+    LogToFile("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
+    if ScriptSettings.EnableDebug: Log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
 
-    dataUser = e.Login
-    dataUserName = e.DisplayName
-    reward = e.RewardTitle
-    message = e.Message
+    if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
+        LogToFile("Redemption matches both status and reward name. Starting thread to process the redemption.")
+        if ScriptSettings.EnableDebug: Log("Redemption matches both status and reward name. Starting thread to process the redemption.")
 
-    LogToFile("Redeemed reward title:" + str(e.RewardTitle.lower()))
-    Log("Redeemed reward title:" + str(e.RewardTitle.lower()))
-    #Log("Rewards in settings:" + str([name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]))
-    
-    LogToFile("Starting thread to handle the redemption.")
-    if e.RewardTitle.lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
-        ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(reward, message, dataUser, dataUserName)))
+        ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(e.RewardTitle, e.Message, e.DisplayName)))
+    else:
+        LogToFile("Redemption is the wrong status or reward name. Skipping.")
+        if ScriptSettings.EnableDebug: Log("Redemption is the wrong status or reward name. Skipping.")
     return
 
-def RewardRedeemedWorker(reward, message, dataUser, dataUserName):
+def RewardRedeemedWorker(reward, message, dataUserName):
     if ScriptSettings.EnableDebug:
-        Log(dataUserName + " is redeeming " + reward + " with flag information " + message)
+        Log("Thread started. Processing " + reward + " recemption from " + dataUserName + " with message " + message)
 
     #When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed for by scanning the message for keywords
     MessageString = str(message)
-    if any (keyword in MessageString for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal"]):
+    if any (keyword.lower() in MessageString.lower() for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted", 
+                "battlescars", "bodyguard", "enemyunknown", "musical", "fistfight", "floorislava", "forwardisback", "friendlyfire", "gottagofast", "batman", "imaginarynumbers",
+                "isthisrandomized", "kleptomania", "menarepigs", "biggermagnet", "mysteryjuice", "neatfreak", "omnidextrous", "payablegolbez", "saveusbigchocobo", "sixleggedrace",
+                "skywarriors", "worthfighting", "tellahmaneuver", "3point", "timeismoney", "darts", "unstackable", "sylph"]):
         New_Game = "FF4 Free Enterprise"
-    elif any (keyword in MessageString for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC"]) or len(MessageString) > 350:
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC"]) or len(MessageString) > 350:
         New_Game = "FF6 Worlds Collide"
-    elif any (keyword in MessageString for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
         New_Game = "FF6 Beyond Chaos"
-    elif any (keyword in MessageString for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
         New_Game = "Timespinner"
-    elif any (keyword in MessageString for keyword in ["FFV", "Career", "FFVCD"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["FFV", "Career", "FFVCD"]):
         New_Game = "FF5 Career Day"
-    elif any (keyword in MessageString for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
         New_Game = "SMRPG Randomizer"
-    elif any (keyword in MessageString for keyword in ["Secret of Mana", "SoM"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["Secret of Mana", "SoM"]):
         New_Game = "Secret of Mana Randomizer"
-    elif any (keyword in MessageString for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
         New_Game = "Super Mario 3 Randomizer"
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["Symphony of the Night", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventure mode", "safe mode"]):
+        New_Game = "SOTN"
     else:
         New_Game = "Unknown"
 
@@ -416,8 +403,7 @@ def Unload():
             LogToFile("Redemption event listener unloaded.")
             EventReceiver = None
     except:
-        if ScriptSettings.EnableDebug: Log("Event receiver already disconnected")
-
+        LogToFile("Event receiver already disconnected")
     return
 
 #   Opens readme file <Optional - DO NOT RENAME>
