@@ -341,13 +341,26 @@ def EventReceiverRewardRedeemed(sender, e):
     if ScriptSettings.EnableDebug: Log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
 
     if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
-        LogToFile("Redemption matches both status and reward name. Starting thread to process the redemption.")
-        if ScriptSettings.EnableDebug: Log("Redemption matches both status and reward name. Starting thread to process the redemption.")
+        LogToFile("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
+        if ScriptSettings.EnableDebug: Log("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
 
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(e.RewardTitle, e.Message, e.DisplayName)))
+    elif str(e.Status).lower() == "action taken" and str(e.RewardTitle).lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
+        #Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there is a matching redemption in the queue that can be automatically removed.
+        LogToFile("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
+        if ScriptSettings.EnableDebug: Log("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
+        for i in range(len(Redemptions)):
+            if Redemptions[i].Username == e.DisplayName and Redemptions[i].Message == e.Message:
+                Redemptions.pop(i)
+                SaveRedemptions()
+                LogToFile("Redemption at index " + str(i) + " automatically removed from the queue.")
+                if ScriptSettings.EnableDebug: Log("Redemption at index " + str(i) + " automatically removed from the queue.")
+                return
+        LogToFile("No matching redemption found. Was it already removed from the queue?")
+        if ScriptSettings.EnableDebug: Log("No matching redemption found. Was it already removed from the queue?")      
     else:
-        LogToFile("Redemption is the wrong status or reward name. Skipping.")
-        if ScriptSettings.EnableDebug: Log("Redemption is the wrong status or reward name. Skipping.")
+        LogToFile("Redemption is the wrong status and reward name. Skipping.")
+        if ScriptSettings.EnableDebug: Log("Redemption is the wrong status and reward name. Skipping.")
     return
 
 def RewardRedeemedWorker(reward, message, dataUserName):
