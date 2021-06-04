@@ -13,7 +13,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.2.2-Beta"
+Version = "1.2.3-Beta"
 
 #   Define Global Variables <Required>
 ScriptPath = os.path.dirname(__file__)
@@ -114,7 +114,7 @@ def Execute(data):
                     #An index is displayed with each line. The index can be referenced with other commands.
                     index = 1
                     for redemption in Redemptions:
-                        if ScriptSettings.DisplayMessageOnGameUnknown and redemption.Game == "Unknown":
+                        if ScriptSettings.DisplayMessageOnGameUnknown and str(redemption.Game).lower().strip() == "unknown":
                             Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
                         else:
                             Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
@@ -124,6 +124,36 @@ def Execute(data):
                     return
                 else:
                     Post("The community queue is empty!")
+        elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " find") 
+            and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "") 
+                or user_id == "216768170")):
+            LogToFile("Redemption search command received.")
+            if data.GetParamCount() < 4:
+                if data.GetParamCount() == 2:
+                    #No username supplied. Search for redemptions by the user that posted the command.
+                    search_username = data.User
+                else: 
+                    #Username supplied. Search for redemptions by the supplied username
+                    search_username = data.GetParam(2)
+                LogToFile("Searching queue for redemptions by user " + str(search_username) + ".")
+                index = 1
+                found = False
+                for redemption in Redemptions:
+                    if str(redemption.Username).lower() == str(search_username).lower():
+                        LogToFile("Redemption found at index " + str(index) + ".")
+                        if ScriptSettings.DisplayMessageOnGameUnknown and str(redemption.Game).lower().strip() == "unknown":
+                            Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
+                        else:
+                            Post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
+                        found = True
+                    index = index + 1
+                if not found:
+                    LogToFile("No redemptions were found for the username " + search_username + ".")
+                    Post("No redemptions were found for the username " + search_username + ".")
+                return
+            else:
+                LogToFile("Search command had too many parameters: " + str(data.GetParamCount()) + ". Showing syntax hint.")
+                if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " find <Optional Username>")
         #Check if the user is attempting to remove an item from the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
