@@ -33,8 +33,8 @@ def loadRedemptions():
     log("Attempting to load redemptions file.")
     if redemptions_path and os.path.isfile(redemptions_path):
         with open(redemptions_path, encoding="utf-8-sig", mode="r") as infile:
-            return json.load(infile)    #Load the json data
             log("Redemptions file loaded.")
+            return json.load(infile)    #Load the json data
     else:
         raise IOError("Error loading redemptions file " + redemptions_path + " Is the updater in the script directory with the redemptions.json file? " + str(e))
 
@@ -42,8 +42,8 @@ def loadSettings():
     log("Attempting to load settings file.")
     if settings_path and os.path.isfile(settings_path):
         with codecs.open(settings_path, encoding="utf-8-sig", mode="r") as f:
-            return json.load(f)
             log("Settings file loaded.")
+            return json.load(f)
     else:
         raise IOError("Error loading settings file " + settings_path + " Is the updater in the script directory with the settings.json file?")
 
@@ -106,13 +106,15 @@ def main():
             # If there are no (valid) credentials available, let the user log in.
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    log("The credentials existed, but needed a refresh. Opening browser window to authenticate.")
-                    creds.refresh(Request())
+                    if os.path.exists(token_path):
+                        os.remove(token_path)
+                    log("The credentials existed, but needed a refresh. Deleting token and opening browser window to authenticate.")
+                    #creds.refresh(Request())
                 else:
                     log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        credentials_path, api_scope)
-                    creds = flow.run_local_server(port=0)
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    credentials_path, api_scope)
+                creds = flow.run_local_server(port=0)
                 # Save the credentials for the next run
                 log("Authentication successful. Saving the credentials to file.")
                 with open(token_path, 'w') as token:
