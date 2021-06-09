@@ -252,7 +252,7 @@ def Execute(data):
                     changes = False
                     #Get the index and a set of comma-separated attributes from the message
                     index = int(data.GetParam(2))
-                    data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):].split(",")
+                    data = str(data.Message)[len("!" + ScriptSettings.CommandName + " edit " + str(index)):].split("|")
                     target = Redemptions[index - 1]
 
                     #Attempt to modify each type of attribute. Do nothing if the attribute is not found. Save only if changes happen.
@@ -287,7 +287,7 @@ def Execute(data):
                     if ScriptSettings.EnableDebug: Log("Error encountered when editing redemption: " + e.message)
             else:
                 LogToFile("Modification command did not have enough parameters. Displaying usage.")
-                if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>")
+                if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " edit <Index> <Username/Game/Message>:<Value>(|<Username/Game/Message>:<Value>|...)")
     
 #   [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
@@ -375,7 +375,7 @@ def EventReceiverRewardRedeemed(sender, e):
         if ScriptSettings.EnableDebug: Log("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
 
         ThreadQueue.append(threading.Thread(target=RewardRedeemedWorker,args=(e.RewardTitle, e.Message, e.DisplayName)))
-    elif str(e.Status).lower() == "action taken" and str(e.RewardTitle).lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
+    elif str(e.Status).lower() == "action_taken" and str(e.RewardTitle).lower() in [name.strip().lower() for name in ScriptSettings.TwitchRewardNames.split(",")]:
         #Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there is a matching redemption in the queue that can be automatically removed.
         LogToFile("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
         if ScriptSettings.EnableDebug: Log("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
@@ -404,12 +404,12 @@ def RewardRedeemedWorker(reward, message, dataUserName):
                 "isthisrandomized", "kleptomania", "menarepigs", "biggermagnet", "mysteryjuice", "neatfreak", "omnidextrous", "payablegolbez", "saveusbigchocobo", "sixleggedrace",
                 "skywarriors", "worthfighting", "tellahmaneuver", "3point", "timeismoney", "darts", "unstackable", "sylph"]):
         New_Game = "FF4 Free Enterprise"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC"]) or len(MessageString) > 350:
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC", "TimeForMemes", "Terra", "Relm", "Umaro", "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]) or len(MessageString) > 350:
         New_Game = "FF6 Worlds Collide"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
         New_Game = "FF6 Beyond Chaos"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
-        New_Game = "Timespinner"
+        New_Game = "Timespinner Randomizer"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["FFV", "Career", "FFVCD"]):
         New_Game = "FF5 Career Day"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
@@ -419,7 +419,9 @@ def RewardRedeemedWorker(reward, message, dataUserName):
     elif any (keyword.lower() in MessageString.lower() for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
         New_Game = "Super Mario 3 Randomizer"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["Symphony of the Night", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventure mode", "safe mode"]):
-        New_Game = "SOTN"
+        New_Game = "SOTN Randomizer"
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["LTTP", "Link to the Past", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity", "Berserker"]):
+        New_Game = "LTTP Randomizer"
     else:
         New_Game = "Unknown"
 

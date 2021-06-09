@@ -50,14 +50,9 @@ def loadSettings():
 def main():
     global script_run_path
     global streamlabs_script_path
-    global log_file
-    try:
-        try:
-            log_file = open(log_path, "a+")
-        except IOError as e:
-            log("IOError when creating log file. Is the script directory accurate? " + str(e))
-            
-        if log_file: log_file.write("\n\n")
+    
+    try:            
+        log("\n\n")
         log("Script path: " + script_run_path)
         log("Streamlabs Script path: " + streamlabs_script_path)
         log("Settings path: " + settings_path)
@@ -106,10 +101,11 @@ def main():
             # If there are no (valid) credentials available, let the user log in.
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    if os.path.exists(token_path):
-                        os.remove(token_path)
-                    log("The credentials existed, but needed a refresh. Deleting token and opening browser window to authenticate.")
-                    #creds.refresh(Request())
+                    log("The credentials existed, but needed a refresh.")
+                    try:
+                        creds.refresh(Request())
+                    except Exception as e:
+                        log("Exception caught when refreshing request: " + str(e))
                 else:
                     log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
                 flow = InstalledAppFlow.from_client_secrets_file(
@@ -152,17 +148,19 @@ def main():
 def log(line):
     global log_file
     try:
+        log_file = open(log_path, "a+")
         print(line)
         if log_file: log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
+        log_file.close()
     except Exception as e:
         pass
 
 if __name__ == '__main__':
     try:
         main()
-        input("Success? Press any key to exit.")
+        #input("Success? Press any key to exit.")
     except Exception as e:
         print(str(e))
-        input("Press any key to exit.")
+        #input("Press any key to exit.")
         
     
