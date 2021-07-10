@@ -108,9 +108,9 @@ def main():
                         log("Exception caught when refreshing request: " + str(e))
                 else:
                     log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    credentials_path, api_scope)
-                creds = flow.run_local_server(port=0)
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        credentials_path, api_scope)
+                    creds = flow.run_local_server(port=0)
                 # Save the credentials for the next run
                 log("Authentication successful. Saving the credentials to file.")
                 with open(token_path, 'w') as token:
