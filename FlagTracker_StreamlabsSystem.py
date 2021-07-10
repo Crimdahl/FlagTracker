@@ -410,7 +410,7 @@ def RewardRedeemedWorker(reward, message, dataUserName):
         New_Game = "FF6 Beyond Chaos"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
         New_Game = "Timespinner Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["FFV", "Career", "FFVCD"]):
+    elif any (keyword.lower() in MessageString.lower() for keyword in ["FFV", "FF5", "Career", "FFVCD", "FF5CD", "Final Fantasy 5", "Final Fantasy V", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
         New_Game = "FF5 Career Day"
     elif any (keyword.lower() in MessageString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
         New_Game = "SMRPG Randomizer"
