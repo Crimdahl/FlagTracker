@@ -5,6 +5,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+#   Script Information
+#   Website = "https://www.twitch.tv/Crimdahl"
+#   Description = "Submits flags in a .json file to Google Sheets."
+#   Creator = "Crimdahl"
+#   Version = "1.2.5-Beta"
+
 script_run_path = os.path.dirname(os.path.abspath(__file__))
 if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
     streamlabs_script_path = os.path.join(script_run_path, "Services\Scripts\FlagTracker")
