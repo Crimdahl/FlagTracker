@@ -7,6 +7,7 @@ import codecs, json, os, re, io, threading, datetime, clr, math, subprocess, ins
 clr.AddReference("IronPython.Modules.dll")
 clr.AddReferenceToFileAndPath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "References", "TwitchLib.PubSub.dll"))
 from TwitchLib.PubSub import TwitchPubSub
+from re import search, compile
 
 #   Script Information <Required>
 ScriptName = "FlagTracker"
@@ -398,29 +399,34 @@ def RewardRedeemedWorker(reward, message, dataUserName):
 
     #When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed for by scanning the message for keywords
     detectionString = str(reward + ' ' + message)
-    if any (keyword.lower() in detectionString.lower() for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted", 
+    hexRegex = compile(r'[0-9a-fA-F]{50}')
+    if any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["SecretofMana"]):
+        newGame = "Secret of Mana Randomizer"
+    elif any (keyword in detectionString for keyword in ["SoM"]):
+        newGame = "Secret of Mana Randomizer"
+    elif search(hexRegex, detectionString):
+        newGame = "Secret of Mana Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["BC", "BeyondChaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
+        newGame = "FF6 Beyond Chaos"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
+        newGame = "Timespinner Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["FFV", "FF5", "Career", "FFVCD", "FF5CD", "FinalFantasy5", "FinalFantasyV", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
+        newGame = "FF5 Career Day"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["SMRPG", "SuperMarioRPG", "Geno", "Cspjl", "-fakeout"]):
+        newGame = "SMRPG Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["WC", "WorldsCollide", "FFVIWC", "FF6WC", "TimeForMemes", "Terra", "Relm", "Umaro", "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]):
+        newGame = "FF6 Worlds Collide"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["SuperMario3", "Mario3", "SM3", "SM3R"]):
+        newGame = "Super Mario 3 Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["SymphonyoftheNight", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventuremode", "safemode"]):
+        newGame = "SOTN Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["LTTP", "LinktothePast", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity", "Berserker"]):
+        newGame = "LTTP Randomizer"
+    elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["FF4FE", "FreeEnterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted", 
                 "battlescars", "bodyguard", "enemyunknown", "musical", "fistfight", "floorislava", "forwardisback", "friendlyfire", "gottagofast", "batman", "imaginarynumbers",
-                "isthisrandomized", "kleptomania", "menarepigs", "biggermagnet", "mysteryjuice", "neatfreak", "omnidextrous", "payablegolbez", "saveusbigchocobo", "sixleggedrace",
+                "isthisrandomized", "kleptomania", "menarepigs", "biggermagnet", "mysteryjuice", "neatfreak", "omnidextrous", "payablegolbez", "bigchocobo", "sixleggedrace",
                 "skywarriors", "worthfighting", "tellahmaneuver", "3point", "timeismoney", "darts", "unstackable", "sylph"]):
         newGame = "FF4 Free Enterprise"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC", "TimeForMemes", "Terra", "Relm", "Umaro", "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]):
-        newGame = "FF6 Worlds Collide"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
-        newGame = "FF6 Beyond Chaos"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
-        newGame = "Timespinner Randomizer"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["FFV", "FF5", "Career", "FFVCD", "FF5CD", "Final Fantasy 5", "Final Fantasy V", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
-        newGame = "FF5 Career Day"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
-        newGame = "SMRPG Randomizer"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["Secret of Mana", "SoM"]):
-        newGame = "Secret of Mana Randomizer"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
-        newGame = "Super Mario 3 Randomizer"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["Symphony of the Night", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventure mode", "safe mode"]):
-        newGame = "SOTN Randomizer"
-    elif any (keyword.lower() in detectionString.lower() for keyword in ["LTTP", "Link to the Past", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity", "Berserker"]):
-        newGame = "LTTP Randomizer"
     else:
         newGame = "Unknown"
 
