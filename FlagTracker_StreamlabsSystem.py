@@ -399,12 +399,12 @@ def RewardRedeemedWorker(reward, message, dataUserName):
 
     #When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed for by scanning the message for keywords
     detectionString = str(reward + ' ' + message)
-    hexRegex = compile(r'[0-9a-fA-F]{50}')
+    somRegex = compile(r'[0-9a-fA-F]{50}')
     if any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["SecretofMana"]):
         newGame = "Secret of Mana Randomizer"
     elif any (keyword in detectionString for keyword in ["SoM"]):
         newGame = "Secret of Mana Randomizer"
-    elif search(hexRegex, detectionString):
+    elif search(somRegex, detectionString):
         newGame = "Secret of Mana Randomizer"
     elif any (keyword.lower() in detectionString.lower().replace(' ', '') for keyword in ["BC", "BeyondChaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
         newGame = "FF6 Beyond Chaos"
