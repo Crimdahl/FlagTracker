@@ -93,14 +93,14 @@ class Settings(object):
 
 #   Process messages <Required>
 def Execute(data):
-    user_id = GetUserID(data.RawData)
+    userID = GetUserID(data.RawData)
 
     #Check if the streamer is live. Still run commands if the script is set to run while offline
     if Parent.IsLive() or not ScriptSettings.RunCommandsOnlyWhenLive:
         #Check if the message begins with "!" and the command name AND the user has permissions to run the command
         if (str(data.Message).startswith("!" + ScriptSettings.CommandName) and data.GetParamCount() == 1
             and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "")                                                 
-                or user_id == "216768170")):
+                or userID == "216768170")):
             LogToFile("Base command received.")
             #If the user is using Google Sheets, post a link to the Google Sheet in chat
             if ScriptSettings.EnableGoogleSheets and ScriptSettings.SpreadsheetID != "":
@@ -126,20 +126,20 @@ def Execute(data):
                     Post("The community queue is empty!")
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " find") 
             and (Parent.HasPermission(data.User, ScriptSettings.DisplayPermissions, "") 
-                or user_id == "216768170")):
+                or userID == "216768170")):
             LogToFile("Redemption search command received.")
             if data.GetParamCount() < 4:
                 if data.GetParamCount() == 2:
                     #No username supplied. Search for redemptions by the user that posted the command.
-                    search_username = data.User
+                    searchUsername = data.User
                 else: 
                     #Username supplied. Search for redemptions by the supplied username
-                    search_username = data.GetParam(2)
-                LogToFile("Searching queue for redemptions by user " + str(search_username) + ".")
+                    searchUsername = data.GetParam(2)
+                LogToFile("Searching queue for redemptions by user " + str(searchUsername) + ".")
                 index = 1
                 found = False
                 for redemption in Redemptions:
-                    if str(redemption.Username).lower() == str(search_username).lower():
+                    if str(redemption.Username).lower() == str(searchUsername).lower():
                         LogToFile("Redemption found at index " + str(index) + ".")
                         if ScriptSettings.DisplayMessageOnGameUnknown and str(redemption.Game).lower().strip() == "unknown":
                             Post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
@@ -148,8 +148,8 @@ def Execute(data):
                         found = True
                     index = index + 1
                 if not found:
-                    LogToFile("No redemptions were found for the username " + search_username + ".")
-                    Post("No redemptions were found for the username " + search_username + ".")
+                    LogToFile("No redemptions were found for the username " + searchUsername + ".")
+                    Post("No redemptions were found for the username " + searchUsername + ".")
                 return
             else:
                 LogToFile("Search command had too many parameters: " + str(data.GetParamCount()) + ". Showing syntax hint.")
@@ -157,7 +157,7 @@ def Execute(data):
         #Check if the user is attempting to remove an item from the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " remove") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-                or user_id == "216768170")):
+                or userID == "216768170")):
             LogToFile("Redemption removal command received.")
             #Check if the supplied information has three or more parameters: !command, remove, and one or more indices
             if data.GetParamCount() >= 3: 
@@ -185,13 +185,13 @@ def Execute(data):
                     if isinstance(e, IndexError):
                         if ScriptSettings.EnableResponses: Post("Error: Supplied index was out of range. The valid range is 1-" + str(len(Redemptions)) + ".")
             else:
-                #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                #If the supplied command is just "!<command name> remove" and chat responses are enabled, display the command usage text in chat.
                 LogToFile("Removal command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " remove <Comma-Separated Integer Indexes>")
         #Check if the user is attempting to add an item to the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " add") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-                or user_id == "216768170")):
+                or userID == "216768170")):
             LogToFile("Redemption addition command received.")
             #Check if the supplied information has three or more parameters: !command, add, and one or more sets of information
             if data.GetParamCount() >= 3: 
@@ -199,7 +199,7 @@ def Execute(data):
                 DataString = str(data.Message)
                 #Separate the information sets from the rest of the message and split them by pipe delimiter
                 DataArray = DataString[DataString.index("add") + len("add"):].split("|")
-                redemptions_added = 0
+                redemptionsAdded = 0
                 for info in DataArray:
                     if ScriptSettings.EnableDebug: Log("Adding new redemption via add command: " + str(info))
                     #Create a redemption object with the Username, Message, and Game
@@ -221,32 +221,32 @@ def Execute(data):
 
                         if "index:" in info:
                             Redemptions.insert(int(GetAttribute("Index", info)) - 1, Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
-                            redemptions_added = redemptions_added + 1
+                            redemptionsAdded = redemptionsAdded + 1
                         else:        
                             Redemptions.append(Redemption(Username=NewUser, Message=NewMessage, Game=NewGame))
-                            redemptions_added = redemptions_added + 1
+                            redemptionsAdded = redemptionsAdded + 1
                     except (AttributeError, ValueError) as e:
                         if ScriptSettings.EnableDebug: Log("Error encountered when adding redemptions: " + e.message)
                         continue
                 #Save the new redemptions. This method also saves to Google Sheets if enabled, so no additional logic is required to 
                 #   add entries to Google Sheets.
-                if redemptions_added > 0:
+                if redemptionsAdded > 0:
                     SaveRedemptions()
                     LogToFile("Redemption(s) successfully added.")
-                    if ScriptSettings.EnableResponses: Post("Successfully added " + str(redemptions_added) + " redemption(s) to the queue.")
+                    if ScriptSettings.EnableResponses: Post("Successfully added " + str(redemptionsAdded) + " redemption(s) to the queue.")
                 else:
                     LogToFile("ERROR: Failed to add redemption(s) to the queue.")
                     if ScriptSettings.EnableResponses: Post("Failed to add redemptions to the queue.")
             else:
-                #If the supplied command is just "!<command_name> remove" and chat responses are enabled, display the command usage text in chat.
+                #If the supplied command is just "!<command name> remove" and chat responses are enabled, display the command usage text in chat.
                 LogToFile("Addition command did not have enough parameters. Displaying usage.")
                 if ScriptSettings.EnableResponses: Post("Usage: !" + ScriptSettings.CommandName + " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
         #Check if the user is attempting to edit an item in the queue. Uses different permissions from displaying the queue.
         elif (str.startswith(data.Message, "!" + ScriptSettings.CommandName + " edit") 
             and (Parent.HasPermission(data.User, ScriptSettings.ModifyPermissions, "") 
-                or user_id == "216768170")):
+                or userID == "216768170")):
             LogToFile("Redemption modification command received.")
-            #This command takes 3 or more parameters: !<command_name>, an index, and attributes to edit at that index
+            #This command takes 3 or more parameters: !<command name>, an index, and attributes to edit at that index
             if data.GetParamCount() >= 3: 
                 try:
                     changes = False
@@ -366,7 +366,6 @@ def EventReceiverConnected(sender, e):
     return
 
 def EventReceiverRewardRedeemed(sender, e):
-    event_status = str(e.Status)
     LogToFile("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
     if ScriptSettings.EnableDebug: Log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
 
@@ -398,38 +397,38 @@ def RewardRedeemedWorker(reward, message, dataUserName):
         Log("Thread started. Processing " + reward + " recemption from " + dataUserName + " with message " + message)
 
     #When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed for by scanning the message for keywords
-    MessageString = str(message)
-    if any (keyword.lower() in MessageString.lower() for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted", 
+    detectionString = str(reward + ' ' + message)
+    if any (keyword.lower() in detectionString.lower() for keyword in ["FF4FE", "Free Enterprise", "FFIV", "FF4", "whichburn", "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted", 
                 "battlescars", "bodyguard", "enemyunknown", "musical", "fistfight", "floorislava", "forwardisback", "friendlyfire", "gottagofast", "batman", "imaginarynumbers",
                 "isthisrandomized", "kleptomania", "menarepigs", "biggermagnet", "mysteryjuice", "neatfreak", "omnidextrous", "payablegolbez", "saveusbigchocobo", "sixleggedrace",
                 "skywarriors", "worthfighting", "tellahmaneuver", "3point", "timeismoney", "darts", "unstackable", "sylph"]):
-        New_Game = "FF4 Free Enterprise"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC", "TimeForMemes", "Terra", "Relm", "Umaro", "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]) or len(MessageString) > 350:
-        New_Game = "FF6 Worlds Collide"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
-        New_Game = "FF6 Beyond Chaos"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
-        New_Game = "Timespinner Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["FFV", "FF5", "Career", "FFVCD", "FF5CD", "Final Fantasy 5", "Final Fantasy V", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
-        New_Game = "FF5 Career Day"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
-        New_Game = "SMRPG Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["Secret of Mana", "SoM"]):
-        New_Game = "Secret of Mana Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
-        New_Game = "Super Mario 3 Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["Symphony of the Night", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventure mode", "safe mode"]):
-        New_Game = "SOTN Randomizer"
-    elif any (keyword.lower() in MessageString.lower() for keyword in ["LTTP", "Link to the Past", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity", "Berserker"]):
-        New_Game = "LTTP Randomizer"
+        newGame = "FF4 Free Enterprise"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["WC", "Worlds Collide", "FFVIWC", "FF6WC", "TimeForMemes", "Terra", "Relm", "Umaro", "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]):
+        newGame = "FF6 Worlds Collide"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["BC", "Beyond Chaos", "FFVIBC", "FF6BC", "johnnydmad", "capslockoff", "alasdraco", "makeover" "notawaiter"]):
+        newGame = "FF6 Beyond Chaos"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["TS", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria"]):
+        newGame = "Timespinner Randomizer"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["FFV", "FF5", "Career", "FFVCD", "FF5CD", "Final Fantasy 5", "Final Fantasy V", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
+        newGame = "FF5 Career Day"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["SMRPG", "Super Mario RPG", "Geno", "Cspjl", "-fakeout"]):
+        newGame = "SMRPG Randomizer"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["Secret of Mana", "SoM"]):
+        newGame = "Secret of Mana Randomizer"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["Super Mario 3", "Mario 3", "SM3", "SM3R"]):
+        newGame = "Super Mario 3 Randomizer"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["Symphony of the Night", "SOTN", "empty-hand", "gem-farmer", "scavenger", "adventure mode", "safe mode"]):
+        newGame = "SOTN Randomizer"
+    elif any (keyword.lower() in detectionString.lower() for keyword in ["LTTP", "Link to the Past", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity", "Berserker"]):
+        newGame = "LTTP Randomizer"
     else:
-        New_Game = "Unknown"
+        newGame = "Unknown"
 
     #Create the new redemption object, append it to the list of redemptions, and save to file (and Google Sheets, if enabled)
     LogToFile("Creating new redemption object.")
-    new_redemption = Redemption(Username=dataUserName, Game=New_Game, Message=message)
+    newRedemption = Redemption(Username=dataUserName, Game=newGame, Message=message)
     LogToFile("Object created. Appending object to redemptions list.")
-    Redemptions.append(new_redemption)
+    Redemptions.append(newRedemption)
     LogToFile("Saving redemptions.")
     SaveRedemptions()
     if ScriptSettings.EnableResponses: Post("Thank you for redeeming " + reward + ", " + dataUserName + ". Your game has been added to the queue.")
@@ -535,16 +534,16 @@ def GetAttribute(attribute, message):
     attribute = attribute.lower() + ":"
     #The start index of the attribute begins at the end of the attribute designator, such as "game:"
     try:
-        index_of_beginning_of_attribute = message.lower().index(attribute) + len(attribute)
+        indexBeginningOfAttribute = message.lower().index(attribute) + len(attribute)
     except ValueError as e:
         raise e
     #The end index of the attribute is at the last space before the next attribute designator, or at the end of the message
     try:
-        index_of_end_of_attribute = message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + message[index_of_beginning_of_attribute:].index(":")].rindex(",")
+        indexEndOfAttribute = message[indexBeginningOfAttribute:indexBeginningOfAttribute + message[indexBeginningOfAttribute:].index(":")].rindex(",")
     except ValueError:
         #If this error is thrown, the end of the message was hit, so just return all of the remaining message
-        return message[index_of_beginning_of_attribute:].strip()
-    return message[index_of_beginning_of_attribute:index_of_beginning_of_attribute + index_of_end_of_attribute].strip().strip(",")
+        return message[indexBeginningOfAttribute:].strip()
+    return message[indexBeginningOfAttribute:indexBeginningOfAttribute + indexEndOfAttribute].strip().strip(",")
 
 def GetUserID(rawdata):
     #Retrieves the user ID of a Twitch chatter using the raw data returned from Twitch
