@@ -56,7 +56,7 @@
 		"label": "Get Token",
 		"tooltip": "Generate an oAuth Token for the watched twitch account with permissions to read channel point redemptions.",
 		"wsevent": "",
-		"function": "GetToken",
+		"function": "get_token",
 		"group": "Twitch oAuth - KEEP HIDDEN"
 	},
 	"EnableGoogleSheets": {

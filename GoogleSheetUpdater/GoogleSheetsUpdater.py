@@ -1,5 +1,8 @@
 from __future__ import print_function
 import os.path, sys, codecs, json, datetime
+from datetime import datetime as dt
+
+import googleapiclient.errors
 from googleapiclient.discovery import build_from_document
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -26,35 +29,37 @@ api_path = None
 if hasattr(sys, "_MEIPASS"):
     api_path = os.path.join(sys._MEIPASS, "sheets.v4.json")
 else:
-    api_path = "sheets.v4.json"
-    # API_path = os.path.join(streamlabs_script_path, "sheets.v4.json")
+    api_path = os.path.join(os.getcwd(), "sheets.v4.json")
 
 if hasattr(sys, "_MEIPASS"):
-    credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
+    if os.path.isfile(os.path.join(os.getcwd(), "credentials.json")):
+        credentials_path = os.path.join(os.getcwd(), "credentials.json")
+    else:
+        credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
 else:
-    credentials_path = "credentials.json"
-    # credentials_path = os.path.join(streamlabs_script_path, "credentials.json")
+    credentials_path = os.path.join(os.getcwd(), "credentials.json")
 
 
 def load_redemptions():
-    log("Attempting to load redemptions file.")
     if redemptions_path and os.path.isfile(redemptions_path):
-        with open(redemptions_path, encoding="utf-8-sig", mode="r") as infile:
-            log("Redemptions file loaded.")
-            return json.load(infile)  # Load the json data
+        with open(redemptions_path, mode="rb") as infile:
+            data = infile.read().decode("utf-8-sig")
+            json_data = json.loads(data)  # Load the json data
+            log("Redemptions file loaded from " + redemptions_path)
+            return json_data
     else:
         raise IOError(
             "Error loading redemptions file " + redemptions_path + " Is the updater in the script directory with " +
-            "the redemptions.json file? " + str(
-                e))
+            "the redemptions.json file? ")
 
 
 def load_settings():
-    log("Attempting to load settings file.")
     if settings_path and os.path.isfile(settings_path):
-        with codecs.open(settings_path, encoding="utf-8-sig", mode="r") as f:
-            log("Settings file loaded.")
-            return json.load(f)
+        with open(settings_path, mode="rb") as infile:
+            data = infile.read().decode("utf-8-sig")
+            json_data = json.loads(data)
+            log("Settings file loaded from " + settings_path)
+            return json_data
     else:
         raise IOError(
             "Error loading settings file " + settings_path + " Is the updater in the script directory with " +
@@ -66,54 +71,53 @@ def main():
     global streamlabs_script_path
 
     try:
-        log("\n\n")
-        log("Script path: " + script_run_path)
-        log("Streamlabs Script path: " + streamlabs_script_path)
-        log("Settings path: " + settings_path)
-        log("Redemptions path: " + redemptions_path)
-        log("API path: " + api_path)
-        log("Token path: " + token_path)
-        log("Credentials path: " + credentials_path)
+        log("-------------------------------------------")
+        log("Run datetime: " + dt.now().strftime("%Y-%m-%d %I:%M:%S %p"))
+        # log("Script path: " + script_run_path)
+        # log("Streamlabs Script path: " + streamlabs_script_path)
+        # log("Settings path: " + settings_path)
+        # log("Redemptions path: " + redemptions_path)
+        # log("API path: " + api_path)
+        # log("Token path: " + token_path)
+        # log("Credentials path: " + credentials_path)
+        print()
         if os.path.isfile(credentials_path):
-            log("Credentials found.")
+            log("Application credentials loaded successfully.")
         else:
-            log("ERROR: No credentials.json found packed in with the updater.")
+            log("ERROR: No credentials.json found packed in with the updater. Crimdahl messed up!")
             raise AttributeError("No credentials.json found packed in with the updater.")
 
-        settings = {}
-        redemptions = {}
         settings = load_settings()
         redemptions = load_redemptions()
-        spreadsheet_id = ""
-        cell_range = ""
         api_scope = ['https://www.googleapis.com/auth/spreadsheets']
 
-        log("Script Path is " + streamlabs_script_path)
-        log("Getting Spreadsheet ID from " + settings_path)
-        if "SpreadsheetID" in settings.keys():
+        if "SpreadsheetID" in settings.keys() and not settings["SpreadsheetID"] == "":
             spreadsheet_id = settings["SpreadsheetID"]
+            print("Spreadsheet ID identified as " + str(spreadsheet_id) + " from streamlabs script settings.")
         else:
             raise AttributeError(
                 "No Spreadsheet ID existed in settings.json. Please add your spreadsheet's ID in the chatbot settings.")
-        log("Spreadsheet ID is " + spreadsheet_id)
 
-        log("Getting Sheet Name.")
-        if "Sheet" in settings:
-            cell_range = str(settings["Sheet"]) + "!A:C"
+        if "Sheet" in settings.keys() and not settings["Sheet"] == "":
+            sheet_name = settings["Sheet"]
+            cell_range = str(sheet_name) + "!A:D"
+            print("Sheet name identified as " + str(sheet_name) + " from streamlabs script settings.")
         else:
             raise AttributeError(
                 "No Sheet Name existed in settings.json. Please add your sheet's name in the chatbot settings.")
-        log("Sheet Name and cell range is " + cell_range)
 
-        log("Attempting to sync redemptions.json with your Google Sheet.")
+        log("Attempting to sync your Google Sheet with redemptions.json.")
         if redemptions is not None and len(redemptions) > 0:
             creds = None
             # The file token.json stores the user's access and refresh tokens, and is
             # created automatically when the authorization flow completes for the first
             # time.
             if os.path.exists(token_path):
-                log("Token file found.")
+                log("Token file found at " + token_path)
                 creds = Credentials.from_authorized_user_file(token_path, api_scope)
+            #
+            #   BEGIN AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
+            #
             # If there are no (valid) credentials available, let the user log in.
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
@@ -135,32 +139,42 @@ def main():
             log("Getting Sheets v4 API Information.")
             api = None
             if api_path and os.path.isfile(api_path):
-                with open(api_path, encoding="utf-8-sig", mode="r") as infile:
-                    api = json.load(infile)  # Load the json data
+                with open(api_path, mode="rb") as infile:
+                    data = infile.read().decode("utf-8-sig")
+                    api = json.loads(data)  # Load the json data
                     log("Sheets v4 API Information loaded.")
             else:
                 log("ERROR: Failed to load Sheets v4 API Information.")
 
             service = build_from_document(api, credentials=creds)
+            #
+            #   END AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
+            #
 
             # Call the Sheets API
-            log("Sending request to Google Sheets API.")
             sheet = service.spreadsheets()
-            values = [["Username", "Game", "Message"]]
+            values = [["", "", "", "Sheet Last Synced on " + dt.now().strftime("%Y-%m-%d %I:%M:%S %p")],
+                      ["# in Queue", "Username", "Game", "Message"],
+                      ["----------", "----------", "----------", "----------"]]
+            index = 1
             for redemption in redemptions:
-                values.append([redemption["Username"], redemption["Game"], redemption["Message"]])
+                values.append([str(index), redemption["Username"], redemption["Game"], redemption["Message"]])
+                index = index + 1
             for i in range(5):
-                values.append(["", "", ""])
-            log("Redemption contents: " + str(values))
+                values.append(["", "", "", ""])
             body = {"values": values}
-            sheet.values().update(spreadsheetId=spreadsheet_id, range=cell_range,
+            try:
+                sheet.values().update(spreadsheetId=spreadsheet_id, range=cell_range,
                                   valueInputOption="USER_ENTERED", body=body).execute()
-            log("Success?")
+                log("Sync successful.")
+            except googleapiclient.errors.HttpError as sheets_error:
+                print("An HTTP Error was returned from the Google server: " + str(sheets_error))
         else:
             log("There were no redemptions.")
+    # If any unhandled exceptions occur, log them and then close the log file
     except Exception as e1:
         try:
-            log(str(e1))
+            log("Unhandled exception: " + str(e1))
         except IOError:
             pass
     finally:
@@ -183,7 +197,5 @@ def log(line):
 if __name__ == '__main__':
     try:
         main()
-        # input("Success? Press any key to exit.")
     except Exception as e:
         print(str(e))
-        # input("Press any key to exit.")

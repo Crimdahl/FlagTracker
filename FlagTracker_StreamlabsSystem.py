@@ -428,8 +428,8 @@ def event_receiver_reward_redeemed(sender, e):
     if script_settings.EnableDebug:
         log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
 
-    if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() \
-            in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
+    if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in \
+            [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
         log_to_file("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
         if script_settings.EnableDebug:
             log("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
@@ -467,69 +467,221 @@ def event_receiver_reward_redeemed(sender, e):
 
 
 def reward_redeemed_worker(reward, message, data_username):
+    log_to_file("Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
     if script_settings.EnableDebug:
         log("Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
 
     # When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed
     # for by scanning the message for keywords
-    detection_string = str(reward + ' ' + message)
-    som_regex = compile(r'[0-9a-fA-F]{50}')
-    if any(re.search(keyword.lower(), detection_string.lower()) for keyword in ["Secret\s?of\s?Mana", "\\bSoM\\b"]):
-        new_game = "Secret of Mana Randomizer"
-    elif search(som_regex, args):
-        new_game = "Secret of Mana Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bBC\\b", "BeyondChaos", "FFVI\s?BC", "FF6\s?BC", "johnnydmad", "capslockoff", "alasdraco",
-              "makeover" "notawaiter"]):
-        new_game = "Beyond Chaos"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bTS\\b", "Timespinner", "Lockbox", "Heirloom", "Fragile", "Talaria", "Stinky\s?Maw"]):
-        new_game = "Timespinner Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bFFV\\b", "\\bFF5\\b", "Career\s?Day", "Career", "FFV\s?CD", "FF5\s?CD", "Final\s?Fantasy\s?5",
-              "Final\s?Fantasy\s?V", "Galuf", "Cara", "Faris", "Butz", "Lenna", "Krile"]):
-        new_game = "Career Day"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["SMRPG", "Super\s?Mario\s?RPG", "Geno", "Cspjl", "-fakeout"]):
-        new_game = "SMRPG Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bWC\\b", "Worlds\s?Collide", "FFVI\s?WC", "FF6\s?WC", "Time\s?For\s?Memes", "Terra", "Relm", "Umaro",
-              "Edgar", "Shadow", "Locke", "Sabin", "Strago", "Gau"]):
-        new_game = "Worlds Collide"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["Super\s?Mario\s?3", "Mario\s?3", "\\bSM3\\b", "SM3R"]):
-        new_game = "Super Mario 3 Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["Symphony\s?of\s?the\s?Night", "SOTN", "empty-?hand", "gem-?farmer", "scavenger", "adventure\s?mode",
-              "safe\s?mode"]):
-        new_game = "SOTN Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["LTTP", "Link\s?to\s?the\s?Past", "Swordless", "YAML", "Pedestal", "Retro", "Assured", "Shopsanity",
-              "Berserker"]):
-        new_game = "LTTP Randomizer"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bFE\\b", "FF4\s?FE", "Free\s?Enterprise", "\\bFFIV\\b", "\\bFF4\\b", "whichburn",
-              "kmain/summon/moon/trap", "spoon", "win:crystal", "afflicted",
-              "battle\s?scars", "bodyguard", "enemy\s?unknown", "musical", "fist\s?fight", "floor\s?is\s?lava",
-              "forward\s?is\s?back", "friendly\s?fire", "gotta\s?go\s?fast", "batman", "imaginary\s?numbers",
-              "is\s?this\s?randomized", "kleptomania", "men\s?are\s?pigs", "bigger\s?magnet", "mystery\s?juice",
-              "neat\s?freak", "omnidextrous", "payable\s?golbez", "big\s?chocobo", "six\s?legged\s?race",
-              "sky\s?warriors", "worth\s?fighting", "tellah\s?maneuver", "3point", "time\s?is\s?money", "darts",
-              "unstackable", "sylph", "no\s?adamants"]):
-        new_game = "Free Enterprise"
-    elif any(re.search(keyword.lower(), detection_string.lower()) for keyword in
-             ["\\bJoT\\b", "CT\s?:?JoT", "Jets/s?of/s?Time", "Chrono\s?Trigger", "Crono\s?Trigger"]):
-        new_game = "Jets of Time"
-    else:
-        new_game = "Unknown"
+    new_game = "Unknown"
+    detection_string = str(reward + ' ' + message).lower().strip().replace(" ", "").replace(":", "")
+    game_information = {
+        "Castlevania: SOTN Randomizer": {
+            "keywords": [
+                "Symphony of the Night",
+                "SOTN",
+                "empty hand",
+                "empty-hand"
+                "gem farmer",
+                "gem-farmer"
+                "scavenger",
+                "adventure mode",
+                "safe mode"],
+            "likelihood": 0
+        },
+        "Chrono Trigger: Jets of Time Randomizer": {
+            "keywords": [
+                "Z1R",
+                "Legend of Zelda Randomizer",
+                "Zelda 1",
+                "Zelda One",
+                "Trigger",
+                "Chrono",
+                "Crono",
+                "Ayla",
+                "Marle",
+                "Frog",
+                "Lucca",
+                "Robo",
+                "Magus"
+            ],
+            "hits": 0
+        },
+        "Golden Sun: TLA Randomizer": {
+            "keywords": [
+                "TLA",
+                "The Lost Age"
+            ],
+            "hits": 0
+        },
+        "FFIV: Free Enterprise": {
+            "keywords": [
+                "FE",
+                "FF4 FE",
+                "Free Enterprise",
+                "FFIV",
+                "FF4",
+                "whichburn",
+                "kmain",
+                "ksummon",
+                "kmoon",
+                "ktrap",
+                "spoon",
+                "wincrystal",
+                "afflicted",
+                "battlescars",
+                "bodyguard",
+                "enemyunknown",
+                "musical",
+                "fistfight",
+                "floorislava",
+                "forwardisback",
+                "friendlyfire",
+                "gottagofast",
+                "batman",
+                "imaginarynumbers",
+                "isthisrandomized",
+                "kleptomania",
+                "menarepigs",
+                "biggermagnet",
+                "mysteryjuice",
+                "neatfreak",
+                "omnidextrous",
+                "payablegolbez",
+                "bigchocobo",
+                "sixleggedrace",
+                "skywarriors",
+                "worthfighting",
+                "tellahmaneuver",
+                "3point",
+                "timeismoney",
+                "unstackable",
+                "noadamants"
+            ],
+            "hits": 0
+        },
+        "FFVI: Beyond Chaos": {
+            "keywords": [
+                "BC",
+                "Beyond Chaos",
+                "FFVI BC",
+                "FF6 BC",
+                "johnnydmad",
+                "capslockoff",
+                "alasdraco",
+                "makeover",
+                "notawaiter"
+            ],
+            "hits": 0
+        },
+        "FFVI: Worlds Collide": {
+            "keywords": [
+                "WC",
+                "Worlds Collide",
+                "FFVIWC",
+                "FF6WC",
+                "TimeForMemes",
+                "Terra",
+                "Relm",
+                "Umaro",
+                "Edgar",
+                "Shadow",
+                "Locke",
+                "Sabin",
+                "Strago",
+                "Gau"
+            ],
+            "hits": 0
+        },
+        "Timespinner Randomizer": {
+            "keywords": [
+                "FFV",
+                "FF5",
+                "Career",
+                "FFVCD",
+                "FF5CD",
+                "Final Fantasy 5",
+                "Final Fantasy V",
+                "Galuf",
+                "Cara",
+                "Faris",
+                "Butz",
+                "Lenna",
+                "Krile"
+            ],
+            "hits": 0
+        },
+        "Secret of Mana Randomizer": {
+            "keywords": [
+                "Secret",
+                "Mana",
+                "SoM"
+            ],
+            "hits": 0
+        },
+        "SMRPG Randomizer": {
+            "keywords": [
+                "SMRPG",
+                "Super",
+                "Mario",
+                "RPG",
+                "Mallow",
+                "Geno",
+                "Cspjl",
+                "fakeout"
+            ],
+            "hits": 0
+        },
+        "Streamer's Choice": {
+            "keywords": [
+                "Streamer",
+                "Choice"
+            ],
+            "hits": 0
+        },
+        "Super Mario 3 Randomizer": {
+            "keywords": [
+                "Super Mario 3",
+                "Mario 3",
+                "SM3",
+                "SM3R"
+            ],
+            "hits": 0
+        },
+        "Zelda 3: LTTP Randomizer": {
+            "keywords": [
+                "LTTP",
+                "Link to the Past",
+                "Pedestal",
+                "Assured",
+                "Z3R",
+                "Zelda3"
+            ],
+            "hits": 0
+        }
+    }
+
+    highest_hits = 0
+    for game, game_data in game_information:
+        if "keywords" in game_data:
+            for keyword in game_data["keywords"]:
+                if keyword.lower().strip().replace(" ", "").replace(":", "") in detection_string:
+                    if "hits" in game_data:
+                        log_to_file("Redemption matches keyword " + keyword + " under game " + game)
+                        game_data["hits"] = game_data["hits"] + 1
+                        if game_data["hits"] > highest_hits:
+                            new_game = game
+                            highest_hits = game_data["hits"]
+                        elif game_data["hits"] == highest_hits:
+                            new_game = new_game + " or " + game
+
+    log_to_file("Redemption most closely matches game " + new_game + " with " + str(highest_hits) + " keyword hits.")
 
     # Create the new redemption object, append it to the list of redemptions, and save to file
     # (and Google Sheets, if enabled)
-    log_to_file("Creating new redemption object.")
     new_redemption = Redemption(Username=data_username, Game=new_game, Message=message)
-    log_to_file("Object created. Appending object to redemptions list.")
     redemptions.append(new_redemption)
-    log_to_file("Saving redemptions.")
+    log_to_file("Saving new redemption.")
     save_redemptions()
     if script_settings.EnableResponses:
         post("Thank you for redeeming " + reward + ", " + data_username + ". Your game has been added to the queue.")
@@ -569,7 +721,7 @@ def get_token():
 
 #   Helper method to log
 def log(message):
-    Parent.log(ScriptName, message)
+    Parent.Log(ScriptName, message)
 
 
 def log_to_file(line):
