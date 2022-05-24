@@ -37,6 +37,7 @@ SETTINGS_PATH = os.path.join(SCRIPT_PATH, "settings.json")
 README_PATH = os.path.join(SCRIPT_PATH, "Readme.md")
 LOG_PATH = os.path.join(SCRIPT_PATH, "flagtrackerlog.txt")
 REDEMPTIONS_PATH = os.path.join(SCRIPT_PATH, "redemptions.json")
+TOKEN_PATH = os.path.join(SCRIPT_PATH, "token.json")
 
 script_settings = None
 log_file = None
@@ -91,6 +92,7 @@ class Settings(object):
 
             #Google Sheets Settings
             self.EnableGoogleSheets = False
+            self.ExpiredTokenAction = "Nothing"
             self.SpreadsheetID = ""
             self.Sheet = ""
 
@@ -690,6 +692,7 @@ def reward_redeemed_worker(reward, message, data_username):
     play_next_at = datetime.datetime.now() + datetime.timedelta(0, 0)
     return
 
+
 def unload():
     # Disconnect EventReceiver cleanly
     log_to_file("Redemption event listener being unloaded.")
@@ -757,11 +760,25 @@ def save_redemptions():
         # Because of chatbot limitations, a secondary, external script is run to take the json file and upload
         # the redemption information to a Google Sheet. The settings file is shared between scripts.
         if script_settings.EnableGoogleSheets:
+            # If the token json exists, check the expiry
+            if script_settings.ExpiredTokenAction == "Chat Alert":
+                if os.path.isfile(TOKEN_PATH):
+                    with open(TOKEN_PATH, 'rb') as token_file:
+                        token_json = json.loads(token_file.read().decode("utf-8-sig"))
+                        if 'expiry' in token_json:
+                            token_expiry = datetime.datetime.strptime(token_json['expiry'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                            if token_expiry < datetime.datetime.now():
+                                post("Alert: Your Flag Tracker Google Sheets token is expired.")
+                                return
+
             log_to_file("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
             if script_settings.SpreadsheetID == "" or script_settings.Sheet == "":
                 log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
                 return
-            os.system(GOOGLE_UPDATER_PATH)
+            threading.Thread(
+                target=os.system,
+                args=(GOOGLE_UPDATER_PATH,)
+            ).start()
     except OSError as e:
         log("ERROR: Unable to save redemptions! " + e.message)
 

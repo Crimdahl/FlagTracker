@@ -1,5 +1,7 @@
 from __future__ import print_function
 import os.path, sys, codecs, json, datetime
+import multiprocessing
+from multiprocessing.pool import ThreadPool
 from datetime import datetime as dt
 
 import googleapiclient.errors
@@ -119,22 +121,34 @@ def main():
             #   BEGIN AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
             #
             # If there are no (valid) credentials available, let the user log in.
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    log("The credentials existed, but needed a refresh.")
-                    try:
-                        creds.refresh(Request())
-                    except Exception as e:
-                        log("Exception caught when refreshing request: " + str(e))
-                else:
-                    log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        credentials_path, api_scope)
-                    creds = flow.run_local_server(port=0)
-                # Save the credentials for the next run
-                log("Authentication successful. Saving the credentials to file.")
-                with open(token_path, 'w') as token:
-                    token.write(creds.to_json())
+            if not creds:
+                log("oAuth credentials did not exist. Opening browser window to authenticate.")
+                creds = open_oauth_web_page(api_scope)
+
+            else:
+                if not creds.valid or creds.expired:
+                    if "ExpiredTokenAction" in settings and settings["ExpiredTokenAction"] == "Open oAuth Page":
+                        log("oAuth credentials exist, but are not valid or are expired. "
+                            "Opening browser window to authenticate.")
+                        creds = open_oauth_web_page(api_scope)
+                    else:
+                        log("oAuth credentials exist, but are not valid or are expired. "
+                            "Skipping sync.")
+                        return
+
+            if not creds:
+                log("oAuth process times out or was aborted. Skipping sync.")
+                return
+
+            # elif not creds or not creds.valid or creds.expired or creds.refresh_token:
+                # if creds and creds.expired and creds.refresh_token:
+                #     log("The credentials existed, but needed a refresh.")
+                #     try:
+                #         creds.refresh(Request())
+                #     except Exception as e:
+
+                #         log("Exception caught when refreshing request: " + str(e))
+                # else:
 
             log("Getting Sheets v4 API Information.")
             api = None
@@ -165,7 +179,7 @@ def main():
             body = {"values": values}
             try:
                 sheet.values().update(spreadsheetId=spreadsheet_id, range=cell_range,
-                                  valueInputOption="USER_ENTERED", body=body).execute()
+                                      valueInputOption="USER_ENTERED", body=body).execute()
                 log("Sync successful.")
             except googleapiclient.errors.HttpError as sheets_error:
                 print("An HTTP Error was returned from the Google server: " + str(sheets_error))
@@ -180,6 +194,28 @@ def main():
     finally:
         if log_file:
             log_file.close()
+
+
+def open_oauth_web_page(api_scope):
+    flow = InstalledAppFlow.from_client_secrets_file(
+        credentials_path, api_scope)
+    pool = ThreadPool()
+    auth_thread = pool.apply_async(
+        func=flow.run_local_server,
+        kwds={'port': 0}
+    )
+    pool.close()
+    try:
+        creds = auth_thread.get(timeout=300)
+    except multiprocessing.TimeoutError:
+        pass
+    # creds = flow.run_local_server(port=0)
+    # Save the credentials for the next run
+    if creds:
+        log("Authentication successful. Saving the credentials to file.")
+        with open(token_path, 'w') as token:
+            token.write(creds.to_json())
+    return creds
 
 
 def log(line):

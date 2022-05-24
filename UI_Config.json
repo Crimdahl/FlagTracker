@@ -66,6 +66,14 @@
 		"tooltip": "Enable or disable updating a Google Sheet with your redemption information.",
 		"group": "Google Sheets Settings"
 	},
+	"ExpiredTokenAction": {
+		"type": "dropdown",
+		"value": "Nothing",
+		"items": [ "Nothing", "Chat Alert", "Open oAuth Page" ],
+		"label": "Expired Token Action",
+		"tooltip": "When the oAuth token is expired, do you want to do nothing, post an alert in chat, or open a web page to generate a new token?",
+		"group": "Google Sheets Settings"
+	},
 	"SpreadsheetID": {
 		"type": "textbox",
 		"value": "",
