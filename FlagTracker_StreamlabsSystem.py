@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import threading
+import traceback
 # Importing Required Libraries
 from re import search, compile
 
@@ -119,15 +120,15 @@ def Execute(data):
         if (str(data.Message).startswith("!" + script_settings.CommandName) and data.GetParamCount() == 1
             and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
                  or user_id == "216768170")):
-            log_to_file("Base command received.")
+            log_to_file("[EXECUTE - NO ARG] Received.")
             # If the user is using Google Sheets, post a link to the Google Sheet in chat
             if script_settings.EnableGoogleSheets and script_settings.SpreadsheetID != "":
-                log_to_file("Displaying Google Sheets link in chat.")
+                log_to_file("[EXECUTE - NO ARG] Displaying Google Sheets link.")
                 post("https://docs.google.com/spreadsheets/d/" + script_settings.SpreadsheetID)
                 return
             # If the user is not using Google Sheets, read lines from the json file in the script directory
             else:
-                log_to_file("Iterating through redemptions to display them in chat.")
+                log_to_file("[EXECUTE - NO ARG] Displaying redemptions in chat.")
                 if len(redemptions) > 0:
                     # An index is displayed with each line. The index can be referenced with other commands.
                     index = 1
@@ -146,7 +147,7 @@ def Execute(data):
         elif (str.startswith(data.Message, "!" + script_settings.CommandName + " find")
                 and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
                      or user_id == "216768170")):
-            log_to_file("Redemption search command received.")
+            log_to_file("[EXECUTE - FIND] Received.")
             if data.GetParamCount() < 4:
                 if data.GetParamCount() == 2:
                     #No username supplied. Search for redemptions by the user that posted the command.
@@ -154,12 +155,12 @@ def Execute(data):
                 else: 
                     #Username supplied. Search for redemptions by the supplied username
                     search_username = data.GetParam(2)
-                log_to_file("Searching queue for redemptions by user " + str(search_username) + ".")
+                log_to_file("[EXECUTE - FIND] Searching for user " + str(search_username) + ".")
                 index = 1
                 found = False
                 for redemption in redemptions:
                     if str(redemption.Username).lower() == str(search_username).lower():
-                        log_to_file("Redemption found at index " + str(index) + ".")
+                        log_to_file("[EXECUTE - FIND] Redemption found at index " + str(index) + ".")
                         if script_settings.DisplayMessageOnGameUnknown and \
                                 str(redemption.Game).lower().strip() == "unknown":
                             post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
@@ -168,12 +169,12 @@ def Execute(data):
                         found = True
                     index = index + 1
                 if not found:
-                    log_to_file("No redemptions were found for the username " + search_username + ".")
+                    log_to_file("[EXECUTE - FIND] No redemptions found for username " + search_username + ".")
                     post("No redemptions were found for the username " + search_username + ".")
                 return
             else:
-                log_to_file("Search command had too many parameters: " +
-                            str(data.GetParamCount()) + ". Showing syntax hint.")
+                log_to_file("[EXECUTE - FIND] Too many parameters: " +
+                            str(data.GetParamCount()))
                 if script_settings.EnableResponses:
                     post("Usage: !" + script_settings.CommandName + " find <Optional Username>")
         # Check if the user is attempting to remove an item from the queue.
@@ -181,10 +182,10 @@ def Execute(data):
         elif (str.startswith(data.Message, "!" + script_settings.CommandName + " remove")
                 and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
                      or user_id == "216768170")):
-            log_to_file("Redemption removal command received.")
+            log_to_file("[EXECUTE - REMOVE] Received.")
             # Check if the supplied information has three or more parameters: !command, remove, and one or more indices
             if data.GetParamCount() >= 3: 
-                log_to_file("Attempting to remove the redemption(s)")
+                log_to_file("[EXECUTE - REMOVE] Removing the redemption(s)")
                 data_string = str(data.Message)
                 # Separate the indices from the rest of the message and split them by comma delimiter
                 data_array = data_string[data_string.index("remove") + len("remove"):].replace(" ", "").split(",")
@@ -203,13 +204,13 @@ def Execute(data):
                         redemptions.pop(int(num) - removed_count)
                         removed_count = removed_count + 1
                     save_redemptions()
-                    log_to_file("Redemptions removed.")
+                    log_to_file("[EXECUTE - REMOVE] Success.")
                     if script_settings.EnableResponses:
                         post("Redemption(s) successfully removed from the queue.")
                 except (ValueError, IndexError) as e:
                     # Log an error if the index is either a non-integer or is outside of the range of the redemptions
                     if script_settings.EnableDebug:
-                        log("Error encountered when removing redemptions: " + e.message)
+                        log("Error: " + e.message)
                     if isinstance(e, IndexError):
                         if script_settings.EnableResponses:
                             post("Error: Supplied index was out of range. The valid range is 1-" +
@@ -217,7 +218,7 @@ def Execute(data):
             else:
                 # If the supplied command is just "!<command name> remove" and chat responses are enabled,
                 # display the command usage text in chat.
-                log_to_file("Removal command did not have enough parameters. Displaying usage.")
+                log_to_file("[EXECUTE - REMOVE] Insufficient parameters.")
                 if script_settings.EnableResponses:
                     post("Usage: !" + script_settings.CommandName + " remove <Comma-Separated Integer Indexes>")
         # Check if the user is attempting to add an item to the queue.
@@ -225,11 +226,11 @@ def Execute(data):
         elif (str.startswith(data.Message, "!" + script_settings.CommandName + " add")
                 and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
                      or user_id == "216768170")):
-            log_to_file("Redemption addition command received.")
+            log_to_file("[EXECUTE - ADD] Received.")
             # Check if the supplied information has three or more parameters:
             # !command, add, and one or more sets of information
             if data.GetParamCount() >= 3: 
-                log_to_file("Attempting to add redemption(s)")
+                log_to_file("[EXECUTE - ADD] Adding redemption(s)")
                 data_string = str(data.Message)
                 # Separate the information sets from the rest of the message and split them by pipe delimiter
                 data_array = data_string[data_string.index("add") + len("add"):].split("|")
@@ -268,17 +269,17 @@ def Execute(data):
                 # so no additional logic is required to add entries to Google Sheets.
                 if redemptions_added > 0:
                     save_redemptions()
-                    log_to_file("Redemption(s) successfully added.")
+                    log_to_file("[EXECUTE - ADD] Success.")
                     if script_settings.EnableResponses:
                         post("Successfully added " + str(redemptions_added) + " redemption(s) to the queue.")
                 else:
-                    log_to_file("ERROR: Failed to add redemption(s) to the queue.")
+                    log_to_file("[EXECUTE - ADD] Failure.")
                     if script_settings.EnableResponses:
                         post("Failed to add redemptions to the queue.")
             else:
                 # If the supplied command is just "!<command name> remove" and chat responses are enabled,
                 # display the command usage text in chat.
-                log_to_file("Addition command did not have enough parameters. Displaying usage.")
+                log_to_file("[EXECUTE - ADD] Insufficient parameters.")
                 if script_settings.EnableResponses:
                     post("Usage: !" + script_settings.CommandName +
                          " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
@@ -287,7 +288,7 @@ def Execute(data):
         elif (str.startswith(data.Message, "!" + script_settings.CommandName + " edit")
                 and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
                      or user_id == "216768170")):
-            log_to_file("Redemption modification command received.")
+            log_to_file("[EXECUTE - EDIT] Received.")
             # This command takes 3 or more parameters: !<command name>, an index, and attributes to edit at that index
             if data.GetParamCount() >= 3: 
                 try:
@@ -325,19 +326,30 @@ def Execute(data):
                     # so no additional logic is required to modify entries in Google Sheets.
                     if changes: 
                         save_redemptions()
-                        log_to_file("Redemption(s) successfully modified.")
+                        log_to_file("[EXECUTE - EDIT] Success.")
                         if script_settings.EnableResponses:
                             post("Queue successfully modified.")
                     else:
-                        log_to_file("No changes were made to any redemptions.")
+                        log_to_file("[EXECUTE - EDIT] Failure.")
                 except (ValueError, IndexError) as e:
                     if script_settings.EnableDebug:
                         log("Error encountered when editing redemption: " + e.message)
             else:
-                log_to_file("Modification command did not have enough parameters. Displaying usage.")
+                log_to_file("[EXECUTE - EDIT] Insufficient parameters.")
                 if script_settings.EnableResponses:
                     post("Usage: !" + script_settings.CommandName +
                          " edit <Index> <Username/Game/Message>:<Value>(|<Username/Game/Message>:<Value>|...)")
+        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " updater")
+              and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
+                   or user_id == "216768170")):
+            log_to_file("[EXECUTE - UPDATER] Received.")
+            if script_settings.EnableGoogleSheets:
+                update_google_sheet()
+                post("Google Sheets Updater executed. "
+                     "If no change occurs, the Google Sheets oAuth token may be expired.")
+                log_to_file("[EXECUTE - UPDATER] Success?")
+            else:
+                log_to_file("[EXECUTE - UPDATER] Failed - Google Sheets Disabled.")
 
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
@@ -359,7 +371,7 @@ def Tick():
 
 #   Reload settings and receiver when clicking Save Settings in the Chatbot
 def ReloadSettings(jsonData):
-    log_to_file("Saving new settings from SL Chatbot GUI.")
+    log_to_file("[RELOAD SETTINGS] Saving new settings from SL Chatbot GUI.")
     if script_settings.EnableDebug:
         log("Saving new settings from SL Chatbot GUI.")
     global event_receiver
@@ -370,11 +382,11 @@ def ReloadSettings(jsonData):
 
         unload()
         start()
-        log_to_file("Settings saved and applied successfully.")
+        log_to_file("[RELOAD SETTINGS] Settings saved and applied successfully.")
         if script_settings.EnableDebug:
             log("Settings saved and applied successfully")
     except Exception as e:
-        log_to_file("Error encountered when saving settings: " + str(e))
+        log_to_file("[RELOAD SETTINGS] Error encountered when saving settings: " + str(e))
         if script_settings.EnableDebug:
             log("Error encountered when saving settings: " + str(e))
     return
@@ -395,7 +407,7 @@ def Init():
 
 
 def start():
-    log_to_file("Initializing receiver and connecting to Twitch channel")
+    log_to_file("[RECEIVER START] Initializing receiver and connecting to Twitch channel")
     if script_settings.EnableDebug:
         log("Initializing receiver and connecting to Twitch channel")
 
@@ -415,308 +427,123 @@ def event_receiver_connected(sender, e):
         "Authorization": "Bearer " + script_settings.TwitchOAuthToken
     }
     result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" + Parent.GetChannelName(), headers))
-    log_to_file("Connection result: " + str(result))
+    log_to_file("[RECEIVER CONNECTED] Connection result: " + str(result))
     if script_settings.EnableDebug: log("Connection result: " + str(result))
     user = json.loads(result["response"])
     user_id = user["data"][0]["id"]
+    log_to_file("[RECEIVER CONNECTED] Your User ID: " + str(user_id))
 
     event_receiver.ListenToRewards(user_id)
     event_receiver.SendTopics(script_settings.TwitchOAuthToken)
+    log_to_file("[RECEIVER CONNECTED] event_receiver_connected method successfully completed.")
     return
 
 
 def event_receiver_reward_redeemed(sender, e):
-    log_to_file("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
-    if script_settings.EnableDebug:
-        log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
-
-    if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in \
-            [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
-        log_to_file("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
+    try:
+        log_to_file("[EVENT RECEIVER] Channel Point Redemption Triggered")
+        log_to_file("[EVENT RECEIVER] List of attributes and methods in the event handler: " + str(dir(e)))
+        log_to_file("[EVENT RECEIVER] Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
         if script_settings.EnableDebug:
-            log("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
+            log("Channel point reward " + str(e.RewardTitle) + " has been redeemed with status " + str(e.Status) + ".")
 
-        thread_queue.append(
-            threading.Thread(
-                target=reward_redeemed_worker,
-                args=(e.RewardTitle, e.Message, e.DisplayName)
+        if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in \
+                [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
+            log_to_file("[EVENT RECEIVER] Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
+            if script_settings.EnableDebug:
+                log("Unfulfilled redemption matches a reward name. Starting thread to add the redemption.")
+
+            thread_queue.append(
+                threading.Thread(
+                    target=reward_redeemed_worker,
+                    args=(e.RewardTitle, e.Message, e.DisplayName)
+                )
             )
-        )
-    elif str(e.Status).lower() == "action_taken" and str(e.RewardTitle).lower() \
-            in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
-        # Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there
-        # is a matching redemption in the queue that can be automatically removed.
-        log_to_file("Fulfilled redemption matches a reward name. "
-                  "Attempting to auto-remove the redemption from the queue.")
-        if script_settings.EnableDebug:
-            log("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
-        for i in range(len(redemptions)):
-            if redemptions[i].Username == e.DisplayName and redemptions[i].Message == e.Message:
-                redemptions.pop(i)
-                save_redemptions()
-                log_to_file("Redemption at index " + str(i) + " automatically removed from the queue.")
-                if script_settings.EnableDebug:
-                    log("Redemption at index " + str(i) + " automatically removed from the queue.")
-                return
-        log_to_file("No matching redemption found. Was it already removed from the queue?")
-        if script_settings.EnableDebug:
-            log("No matching redemption found. Was it already removed from the queue?")
-    else:
-        log_to_file("Redemption is the wrong status and reward name. Skipping.")
-        if script_settings.EnableDebug:
-            log("Redemption is the wrong status and reward name. Skipping.")
+        elif str(e.Status).lower() == "action_taken" and str(e.RewardTitle).lower() \
+                in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
+            # Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there
+            # is a matching redemption in the queue that can be automatically removed.
+            log_to_file("[EVENT RECEIVER] Fulfilled redemption matches a reward name. "
+                    "Attempting to auto-remove the redemption from the queue.")
+            if script_settings.EnableDebug:
+                log("Fulfilled redemption matches a reward name. Attempting to auto-remove the redemption from the queue.")
+            for i in range(len(redemptions)):
+                if redemptions[i].Username == e.DisplayName and redemptions[i].Message == e.Message:
+                    redemptions.pop(i)
+                    save_redemptions()
+                    log_to_file("[EVENT RECEIVER] Redemption at index " + str(i) + " automatically removed from the queue.")
+                    if script_settings.EnableDebug:
+                        log("Redemption at index " + str(i) + " automatically removed from the queue.")
+                    return
+            log_to_file("[EVENT RECEIVER] No matching redemption found. Was it already removed from the queue?")
+            if script_settings.EnableDebug:
+                log("No matching redemption found. Was it already removed from the queue?")
+        else:
+            log_to_file("[EVENT RECEIVER] Redemption is the wrong status and reward name. Skipping.")
+            if script_settings.EnableDebug:
+                log("Redemption is the wrong status and reward name. Skipping.")
+        log("event_receiver_reward_redeemed method successfully completed.")
+    except Exception as ex:
+        log_to_file("[EVENT RECEIVER] The reward handler encountered an unhandled exception of class " + str(type(ex)) + ".")
+        log_to_file("[EVENT RECEIVER] Traceback: " + traceback.format_exc())
     return
 
 
 def reward_redeemed_worker(reward, message, data_username):
-    log_to_file("Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
-    if script_settings.EnableDebug:
-        log("Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
+    try:
+        log_to_file("[REWARD WORKER THREAD] Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
+        if script_settings.EnableDebug:
+            log("Thread started. Processing " + reward + " redemption from " + data_username + " with message " + message)
 
-    # When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed
-    # for by scanning the message for keywords
-    new_game = "Unknown"
-    detection_string = str(reward + ' ' + message).lower().strip().replace(" ", "").replace(":", "")
-    game_information = {
-        "Castlevania: SOTN Randomizer": {
-            "keywords": [
-                "Symphony of the Night",
-                "SOTN",
-                "empty hand",
-                "empty-hand"
-                "gem farmer",
-                "gem-farmer"
-                "scavenger",
-                "adventure mode",
-                "safe mode"],
-            "likelihood": 0
-        },
-        "Chrono Trigger: Jets of Time Randomizer": {
-            "keywords": [
-                "Z1R",
-                "Legend of Zelda Randomizer",
-                "Zelda 1",
-                "Zelda One",
-                "Trigger",
-                "Chrono",
-                "Crono",
-                "Ayla",
-                "Marle",
-                "Frog",
-                "Lucca",
-                "Robo",
-                "Magus"
-            ],
-            "hits": 0
-        },
-        "Golden Sun: TLA Randomizer": {
-            "keywords": [
-                "TLA",
-                "The Lost Age"
-            ],
-            "hits": 0
-        },
-        "FFIV: Free Enterprise": {
-            "keywords": [
-                "FE",
-                "FF4 FE",
-                "Free Enterprise",
-                "FFIV",
-                "FF4",
-                "whichburn",
-                "kmain",
-                "ksummon",
-                "kmoon",
-                "ktrap",
-                "spoon",
-                "wincrystal",
-                "afflicted",
-                "battlescars",
-                "bodyguard",
-                "enemyunknown",
-                "musical",
-                "fistfight",
-                "floorislava",
-                "forwardisback",
-                "friendlyfire",
-                "gottagofast",
-                "batman",
-                "imaginarynumbers",
-                "isthisrandomized",
-                "kleptomania",
-                "menarepigs",
-                "biggermagnet",
-                "mysteryjuice",
-                "neatfreak",
-                "omnidextrous",
-                "payablegolbez",
-                "bigchocobo",
-                "sixleggedrace",
-                "skywarriors",
-                "worthfighting",
-                "tellahmaneuver",
-                "3point",
-                "timeismoney",
-                "unstackable",
-                "noadamants"
-            ],
-            "hits": 0
-        },
-        "FFVI: Beyond Chaos": {
-            "keywords": [
-                "BC",
-                "Beyond Chaos",
-                "FFVI BC",
-                "FF6 BC",
-                "johnnydmad",
-                "capslockoff",
-                "alasdraco",
-                "makeover",
-                "notawaiter"
-            ],
-            "hits": 0
-        },
-        "FFVI: Worlds Collide": {
-            "keywords": [
-                "WC",
-                "Worlds Collide",
-                "FFVIWC",
-                "FF6WC",
-                "TimeForMemes",
-                "Terra",
-                "Relm",
-                "Umaro",
-                "Edgar",
-                "Shadow",
-                "Locke",
-                "Sabin",
-                "Strago",
-                "Gau"
-            ],
-            "hits": 0
-        },
-        "Timespinner Randomizer": {
-            "keywords": [
-                "FFV",
-                "FF5",
-                "Career",
-                "FFVCD",
-                "FF5CD",
-                "Final Fantasy 5",
-                "Final Fantasy V",
-                "Galuf",
-                "Cara",
-                "Faris",
-                "Butz",
-                "Lenna",
-                "Krile"
-            ],
-            "hits": 0
-        },
-        "Secret of Mana Randomizer": {
-            "keywords": [
-                "Secret",
-                "Mana",
-                "SoM"
-            ],
-            "hits": 0
-        },
-        "SMRPG Randomizer": {
-            "keywords": [
-                "SMRPG",
-                "Super",
-                "Mario",
-                "RPG",
-                "Mallow",
-                "Geno",
-                "Cspjl",
-                "fakeout"
-            ],
-            "hits": 0
-        },
-        "Streamer's Choice": {
-            "keywords": [
-                "Streamer",
-                "Choice"
-            ],
-            "hits": 0
-        },
-        "Super Mario 3 Randomizer": {
-            "keywords": [
-                "Super Mario 3",
-                "Mario 3",
-                "SM3",
-                "SM3R"
-            ],
-            "hits": 0
-        },
-        "Zelda 3: LTTP Randomizer": {
-            "keywords": [
-                "LTTP",
-                "Link to the Past",
-                "Pedestal",
-                "Assured",
-                "Z3R",
-                "Zelda3"
-            ],
-            "hits": 0
-        }
-    }
+        # When a person redeems, only a reward name and message is supplied. Attempt to detect which game is being redeemed
+        # for by scanning the message for keywords
+        detection_string = str(reward + ' ' + message).lower().strip().replace(" ", "").replace(":", "")
+        new_game = detect_game(detection_string)
+        log_to_file("[REWARD WORKER THREAD] Redemption most closely matches game " + new_game + ".")
 
-    highest_hits = 0
-    for game, game_data in game_information:
-        if "keywords" in game_data:
-            for keyword in game_data["keywords"]:
-                if keyword.lower().strip().replace(" ", "").replace(":", "") in detection_string:
-                    if "hits" in game_data:
-                        log_to_file("Redemption matches keyword " + keyword + " under game " + game)
-                        game_data["hits"] = game_data["hits"] + 1
-                        if game_data["hits"] > highest_hits:
-                            new_game = game
-                            highest_hits = game_data["hits"]
-                        elif game_data["hits"] == highest_hits:
-                            new_game = new_game + " or " + game
-
-    log_to_file("Redemption most closely matches game " + new_game + " with " + str(highest_hits) + " keyword hits.")
-
-    # Create the new redemption object, append it to the list of redemptions, and save to file
-    # (and Google Sheets, if enabled)
-    new_redemption = Redemption(Username=data_username, Game=new_game, Message=message)
-    redemptions.append(new_redemption)
-    log_to_file("Saving new redemption.")
-    save_redemptions()
-    if script_settings.EnableResponses:
-        post("Thank you for redeeming " + reward + ", " + data_username + ". Your game has been added to the queue.")
+        # Create the new redemption object, append it to the list of redemptions, and save to file
+        # (and Google Sheets, if enabled)
+        new_redemption = Redemption(Username=data_username, Game=new_game, Message=message)
+        redemptions.append(new_redemption)
+        log_to_file("[REWARD WORKER THREAD] Saving new redemption.")
+        save_redemptions()
+        if script_settings.EnableResponses:
+            post("Thank you for redeeming " + reward + ", " + data_username + ". Your game has been added to the queue.")
+        
+        global play_next_at
+        play_next_at = datetime.datetime.now() + datetime.timedelta(0, 0)
+        log_to_file("[REWARD WORKER THREAD] Successfully completed.")
     
-    global play_next_at
-    play_next_at = datetime.datetime.now() + datetime.timedelta(0, 0)
+    except Exception as ex:
+        log_to_file("[REWARD WORKER THREAD] The reward worker thread encountered an unhandled exception of class " + str(type(ex)) + ".")
+        log_to_file("[REWARD WORKER THREAD] Traceback: " + traceback.format_exc())
     return
 
 
 def unload():
     # Disconnect EventReceiver cleanly
-    log_to_file("Redemption event listener being unloaded.")
+    log_to_file("[UNLOAD EVENT LISTENER] Redemption event listener being unloaded.")
     try:
         global event_receiver
         if event_receiver:
             event_receiver.Disconnect()
-            log_to_file("Redemption event listener unloaded.")
+            log_to_file("[UNLOAD EVENT LISTENER] Redemption event listener unloaded.")
             event_receiver = None
     except:
-        log_to_file("Event receiver already disconnected")
+        log_to_file("[UNLOAD EVENT LISTENER] Event receiver already disconnected")
     return
 
 
 #   Opens readme file <Optional - DO NOT RENAME>
 def openreadme():
-    log_to_file("Opening readme file.")
+    log_to_file("[OPEN README] Opening readme file.")
     os.startfile(README_PATH)
     return
 
 
 #   Opens Twitch.TV website to ask permissions
 def get_token():
-    log_to_file("Opening twitch web page to authenticate.")
+    log_to_file("[GET TOKEN] Opening twitch web page to authenticate.")
     os.startfile("https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=7a4xexuuxvxw5jmb9httrqq9926frq"
                  "&redirect_uri=https://twitchapps.com/tokengen/&scope=channel:read:redemptions&force_verify=true")
     return
@@ -743,58 +570,41 @@ def save_redemptions():
     try:        
         # if the redemptions file does not exist, create it
         if not os.path.exists(REDEMPTIONS_PATH):
-            log_to_file("Redemptions.json did not exist. ")
+            log_to_file("[SAVE REDEMPTIONS] Redemptions.json did not exist.")
             with io.open(REDEMPTIONS_PATH, 'w') as outfile:
                 outfile.write(json.dumps({}))
-                log_to_file("Redemptions.json has been created.")
+                log_to_file("[SAVE REDEMPTIONS] Redemptions.json has been created.")
 
         # record the redemptions
-        log_to_file("Writing redemption objects to redemptions.json file.")
+        log_to_file("[SAVE REDEMPTIONS] Writing redemption objects to redemptions.json file.")
         with open (REDEMPTIONS_PATH, 'w') as outfile:
             outfile.seek(0)
             # When writing the Questions to disk, use the Question.toJSON() function
             json.dump(redemptions, outfile, indent=4, default=lambda q: q.toJSON())
             outfile.truncate()
-            log_to_file("Redemption objects written to redemptions.json.")
+            log_to_file("[SAVE REDEMPTIONS] Redemption objects written to redemptions.json.")
 
         # Because of chatbot limitations, a secondary, external script is run to take the json file and upload
         # the redemption information to a Google Sheet. The settings file is shared between scripts.
         if script_settings.EnableGoogleSheets:
-            # If the token json exists, check the expiry
-            if script_settings.ExpiredTokenAction == "Chat Alert":
-                if os.path.isfile(TOKEN_PATH):
-                    with open(TOKEN_PATH, 'rb') as token_file:
-                        token_json = json.loads(token_file.read().decode("utf-8-sig"))
-                        if 'expiry' in token_json:
-                            token_expiry = datetime.datetime.strptime(token_json['expiry'], "%Y-%m-%dT%H:%M:%S.%fZ")
-                            if token_expiry < datetime.datetime.now():
-                                post("Alert: Your Flag Tracker Google Sheets token is expired.")
-                                return
-
-            log_to_file("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
-            if script_settings.SpreadsheetID == "" or script_settings.Sheet == "":
-                log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
-                return
-            threading.Thread(
-                target=os.system,
-                args=(GOOGLE_UPDATER_PATH,)
-            ).start()
+            log_to_file("[SAVE REDEMPTIONS] Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
+            update_google_sheet()
     except OSError as e:
-        log("ERROR: Unable to save redemptions! " + e.message)
+        log("Error: Unable to save redemptions! " + e.message)
 
 
 def load_redemptions():
     # Ensure the questions file exists
-    log_to_file("Loading redemptions from redemptions.json.")
+    log_to_file("[LOAD REDEMPTIONS] Loading redemptions from redemptions.json.")
     if os.path.exists(REDEMPTIONS_PATH):
-        log_to_file("Redemptions.json detected. Opening.")
+        log_to_file("[LOAD REDEMPTIONS] Redemptions.json detected. Opening.")
         try:
             with open(REDEMPTIONS_PATH, "r") as infile:
-                log_to_file("Loading object data from redemptions.json.")
+                log_to_file("[LOAD REDEMPTIONS] Loading object data from redemptions.json.")
                 object_data = json.load(infile)    # Load the json data
 
                 # For each object/question in the object_data, create new questions and feed them to the questions_list
-                log_to_file("Creating redemption objects from the object data.")
+                log_to_file("[LOAD REDEMPTIONS] Creating redemption objects from the object data.")
                 for redemption in object_data:
                     redemptions.append(
                         Redemption(
@@ -803,14 +613,14 @@ def load_redemptions():
                             Message=redemption["Message"]
                         )
                     )
-                log_to_file("Redemptions successfully loaded from redemptions.json")
+                log_to_file("[LOAD REDEMPTIONS] Redemptions successfully loaded from redemptions.json")
                 if script_settings.EnableDebug: log("Redemptions loaded: " + str(len(redemptions)))
         except Exception as e:
-            log_to_file("ERROR loading redemptions from redemptions.json: " + str(e.message))
+            log_to_file("[LOAD REDEMPTIONS] ERROR loading redemptions from redemptions.json: " + str(e.message))
             if script_settings.EnableDebug: log("ERROR loading redemptions from redemptions.json: " + str(e.message))
 
     else:
-        log_to_file("No redemptions file detected. Creating one.")
+        log_to_file("[LOAD REDEMPTIONS] No redemptions file detected. Creating one.")
         if script_settings.EnableDebug: log("WARNING: No redemptions file exists. Creating one.")
         open(REDEMPTIONS_PATH, "w").close()
 
@@ -844,69 +654,237 @@ def get_user_id(raw_data):
     return raw_data
 
 
+def detect_game(message):
+    new_game = "Unknown"
+    detection_string = str(message).lower().strip().replace(" ", "").replace(":", "")
+    game_information = {
+        "Castlevania: SOTN Randomizer": {
+            "keywords": {
+                "Symphony of the Night": 5,
+                "SOTN": 5,
+                "empty hand": 2,
+                "empty-hand": 2,
+                "gem farmer": 2,
+                "gem-farmer": 2,
+                "scavenger": 1,
+                "adventure mode": 1,
+                "safe mode": 1
+            },
+            "likelihood": 0
+        },
+        "Chrono Trigger: Jets of Time Randomizer": {
+            "keywords": {
+                "Trigger": 3,
+                "Chrono": 3,
+                "Crono": 3,
+                "Ayla": 3,
+                "Marle": 3,
+                "Frog": 3,
+                "Lucca": 3,
+                "Robo": 3,
+                "Magus": 3,
+                "Jets of Time": 5,
+                "JoT": 2
+            },
+            "hits": 0
+        },
+        "Golden Sun: TLA Randomizer": {
+            "keywords": {
+                "TLA": 2,
+                "The Lost Age": 5
+            },
+            "hits": 0
+        },
+        "FFIV: Free Enterprise": {
+            "keywords": {
+                "FE": 1,
+                "FF4FE": 3,
+                "Free Enterprise": 5,
+                "FFIV": 3,
+                "FF4": 3,
+                "whichburn": 3,
+                "kmain": 3,
+                "ksummon": 3,
+                "kmoon": 3,
+                "ktrap": 3,
+                "spoon": 1,
+                "wincrystal": 1,
+                "afflicted": 1,
+                "battlescars": 2,
+                "bodyguard": 1,
+                "enemyunknown": 2,
+                "musical": 1,
+                "fistfight": 2,
+                "floorislava": 2,
+                "forwardisback": 2,
+                "friendlyfire": 1,
+                "gottagofast": 2,
+                "batman": 1,
+                "imaginarynumbers": 3,
+                "isthisrandomized": 2,
+                "kleptomania": 3,
+                "menarepigs": 3,
+                "biggermagnet": 4,
+                "mysteryjuice": 3,
+                "neatfreak": 3,
+                "omnidextrous": 3,
+                "payablegolbez": 5,
+                "bigchocobo": 3,
+                "sixleggedrace": 3,
+                "skywarriors": 3,
+                "worthfighting": 3,
+                "tellahmaneuver": 5,
+                "3point": 3,
+                "timeismoney": 3,
+                "unstackable": 1,
+                "noadamants": 5,
+                "draft": 2
+            },
+            "hits": 0
+        },
+        "FFVI: Beyond Chaos": {
+            "keywords": {
+                "BC": 2,
+                "Beyond Chaos": 5,
+                "FFVI BC": 5,
+                "FF6 BC": 5,
+                "johnnydmad": 3,
+                "capslockoff": 2,
+                "alasdraco": 3,
+                "makeover": 1,
+                "notawaiter": 2
+            },
+            "hits": 0
+        },
+        "FFVI: Worlds Collide": {
+            "keywords": {
+                "WC": 2,
+                "Worlds Collide": 5,
+                "FFVIWC": 5,
+                "FF6WC": 5,
+                "TimeForMemes": 1,
+                "Terra": 2,
+                "Relm": 2,
+                "Umaro": 2,
+                "Edgar": 2,
+                "Shadow": 2,
+                "Locke": 2,
+                "Sabin": 2,
+                "Strago": 2,
+                "Gau": 2
+            },
+            "hits": 0
+        },
+        "Timespinner Randomizer": {
+            "keywords": {
+                "FFV": 2,
+                "FF5": 2,
+                "Career": 1,
+                "FFVCD": 5,
+                "FF5CD": 5,
+                "Final Fantasy 5": 2,
+                "Final Fantasy V": 2,
+                "Galuf": 2,
+                "Cara": 2,
+                "Faris": 2,
+                "Butz": 2,
+                "Lenna": 2,
+                "Krile": 2
+            },
+            "hits": 0
+        },
+        "Secret of Mana Randomizer": {
+            "keywords": {
+                "Secret of Mana": 5,
+                "Secret": 1,
+                "Mana": 3,
+                "SoM Rando": 3,
+                "SoM": 1,
+            },
+            "hits": 0
+        },
+        "SMRPG Randomizer": {
+            "keywords": {
+                "SMRPG": 5,
+                "Super": 1,
+                "Mario": 1,
+                "RPG": 1,
+                "Mallow": 2,
+                "Geno": 2,
+                "Cspjl": 2,
+                "fakeout": 1
+            },
+            "hits": 0
+        },
+        "Streamer's Choice": {
+            "keywords": {
+                "Streamer": 1,
+                "Choice": 1
+            },
+            "hits": 0
+        },
+        "Super Mario 3 Randomizer": {
+            "keywords": {
+                "Super Mario 3": 5,
+                "Mario 3": 3,
+                "SM3": 3,
+                "SM3R": 3
+            },
+            "hits": 0
+        },
+        "Zelda 3: LTTP Randomizer": {
+            "keywords": {
+                "LTTP": 5,
+                "Link to the Past": 5,
+                "Pedestal": 2,
+                "Assured": 2,
+                "Z3R": 5,
+                "Zelda3": 5
+            },
+            "hits": 0
+        }
+    }
+
+    highest_hits = 0
+    for game, game_data in game_information.iteritems():
+        if "keywords" in game_data:
+            for keyword, value in game_data["keywords"].iteritems():
+                if keyword.lower().strip().replace(" ", "").replace(":", "") in detection_string:
+                    if "hits" in game_data:
+                        log_to_file("[GAME DETECTION] Redemption matches keyword '" + keyword + "' under game " + game)
+                        game_data["hits"] = game_data["hits"] + value
+                        log_to_file("[GAME DETECTION] " + game + " keyword value is " + str(game_data["hits"]))
+                        if game_data["hits"] > highest_hits:
+                            new_game = game
+                            highest_hits = game_data["hits"]
+                        elif game_data["hits"] == highest_hits:
+                            new_game = new_game + " or " + game
+    return new_game
+
+
+def update_google_sheet():
+    # If the token json exists, check the expiry
+    # if script_settings.ExpiredTokenAction == "Chat Alert":
+    #     if os.path.isfile(TOKEN_PATH):
+    #         with open(TOKEN_PATH, 'rb') as token_file:
+    #             token_json = json.loads(token_file.read().decode("utf-8-sig"))
+    #             if 'expiry' in token_json:
+    #                 token_expiry = datetime.datetime.strptime(token_json['expiry'], "%Y-%m-%dT%H:%M:%S.%fZ")
+    #                 if token_expiry < datetime.datetime.now():
+    #                     post("Alert: Your Flag Tracker Google Sheets token is expired.")
+    #                     return
+    if script_settings.SpreadsheetID == "" or script_settings.Sheet == "":
+        log_to_file("[UPDATE GOOGLE SHEET] Error: No Spreadsheet ID and Sheet in Script Settings.")
+        log("Error: You must enter a valid Spreadsheet ID and Sheet Name to use Google Sheets.")
+        return
+    threading.Thread(
+        target=os.system,
+        args=(GOOGLE_UPDATER_PATH,)
+    ).start()
+
+
 if __name__ == "__main__":
     args = raw_input("Enter the game name: ")
-    somRegex = compile(r'[0-9a-fA-F]{50}')
-    if any(re.search(keyword.lower(), args.lower()) for keyword in ["Secret\s?of\s?Mana", "\\bSoM\\b"]):
-        newGame = "Secret of Mana Randomizer"
-    elif search(somRegex, args):
-        newGame = "Secret of Mana Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bBC\\b", "BeyondChaos", "FFVI\s?BC",
-                                                                      "FF6\s?BC", "johnnydmad", "capslockoff",
-                                                                      "alasdraco", "makeover" "notawaiter"]):
-        newGame = "Beyond Chaos"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bTS\\b", "Timespinner", "Lockbox", "Heirloom",
-                                                                      "Fragile", "Talaria", "Stinky\s?Maw"]):
-        newGame = "Timespinner Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bFFV\\b", "\\bFF5\\b", "Career\s?Day",
-                                                                      "Career", "FFV\s?CD", "FF5\s?CD",
-                                                                      "Final\s?Fantasy\s?5", "Final\s?Fantasy\s?V",
-                                                                      "Galuf", "Cara", "Faris", "Butz", "Lenna",
-                                                                      "Krile"]):
-        newGame = "Career Day"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["SMRPG", "Super\s?Mario\s?RPG", "Geno", "Cspjl",
-                                                                      "-fakeout"]):
-        newGame = "SMRPG Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bWC\\b", "Worlds\s?Collide", "FFVI\s?WC",
-                                                                      "FF6\s?WC", "Time\s?For\s?Memes", "Terra",
-                                                                      "Relm", "Umaro", "Edgar", "Shadow", "Locke",
-                                                                      "Sabin", "Strago", "Gau"]):
-        newGame = "Worlds Collide"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["Super\s?Mario\s?3", "Mario\s?3", "\\bSM3\\b",
-                                                                      "SM3R"]):
-        newGame = "Super Mario 3 Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["Symphony\s?of\s?the\s?Night", "SOTN",
-                                                                      "empty-?hand", "gem-?farmer", "scavenger",
-                                                                      "adventure\s?mode", "safe\s?mode"]):
-        newGame = "SOTN Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["LTTP", "Link\s?to\s?the\s?Past", "Swordless",
-                                                                      "YAML", "Pedestal", "Retro", "Assured",
-                                                                      "Shopsanity", "Berserker"]):
-        newGame = "LTTP Randomizer"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bFE\\b", "FF4\s?FE", "Free\s?Enterprise",
-                                                                      "\\bFFIV\\b", "\\bFF4\\b", "whichburn",
-                                                                      "kmain/summon/moon/trap", "spoon", "win:crystal",
-                                                                      "afflicted", "battle\s?scars", "bodyguard",
-                                                                      "enemy\s?unknown", "musical", "fist\s?fight",
-                                                                      "floor\s?is\s?lava", "forward\s?is\s?back",
-                                                                      "friendly\s?fire", "gotta\s?go\s?fast", "batman",
-                                                                      "imaginary\s?numbers", "is\s?this\s?randomized",
-                                                                      "kleptomania", "men\s?are\s?pigs",
-                                                                      "bigger\s?magnet", "mystery\s?juice",
-                                                                      "neat\s?freak", "omnidextrous",
-                                                                      "payable\s?golbez", "big\s?chocobo",
-                                                                      "six\s?legged\s?race", "sky\s?warriors",
-                                                                      "worth\s?fighting", "tellah\s?maneuver", "3point",
-                                                                      "time\s?is\s?money", "darts", "unstackable",
-                                                                      "sylph", "no\s?adamants"]):
-        newGame = "Free Enterprise"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bJoT\\b", "CT\s?:?JoT", "Jets/s?of/s?Time",
-                                                                      "Chrono\s?Trigger", "Crono\s?Trigger"]):
-        newGame = "Jets of Time"
-    elif any(re.search(keyword.lower(), args.lower()) for keyword in ["\\bpkmn\\b", "pokemon"]):
-        newGame = "Pkmn KI Rando"
-    else:
-        newGame = "Unknown"
 
     print("Argument: " + args)
-    print("Detected game: " + newGame)
+    print("Detected game: " + detect_game(args))

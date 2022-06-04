@@ -9,6 +9,7 @@ from googleapiclient.discovery import build_from_document
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 
 #   Script Information
 #   Website = "https://www.twitch.tv/Crimdahl"
@@ -116,7 +117,12 @@ def main():
             # time.
             if os.path.exists(token_path):
                 log("Token file found at " + token_path)
-                creds = Credentials.from_authorized_user_file(token_path, api_scope)
+                try:
+                    creds = Credentials.from_authorized_user_file(token_path, api_scope)
+                except ValueError as e:
+                    log("oAuth credentials exist, but are not valid: " + str(e) +
+                        " Opening browser window to authenticate.")
+                    creds = open_oauth_web_page(api_scope)
             #
             #   BEGIN AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
             #
@@ -124,27 +130,30 @@ def main():
             if not creds:
                 log("oAuth credentials did not exist. Opening browser window to authenticate.")
                 creds = open_oauth_web_page(api_scope)
-
-            else:
-                if not creds.valid or creds.expired:
+            elif creds.expired:
+                try:
+                    log("oAuth credentials exist, but required a refresh.")
+                    creds.refresh(Request())
+                except RefreshError:
                     if "ExpiredTokenAction" in settings and settings["ExpiredTokenAction"] == "Open oAuth Page":
-                        log("oAuth credentials exist, but are not valid or are expired. "
-                            "Opening browser window to authenticate.")
                         creds = open_oauth_web_page(api_scope)
                     else:
-                        log("oAuth credentials exist, but are not valid or are expired. "
-                            "Skipping sync.")
-                        return
+                        log("Skipping sync: the oAuth token is expired, but script settings are not set to"
+                            "automatically open the oAuth page.")
+
+            elif not creds.valid:
+                log("oAuth credentials exist, but are not valid. Opening browser window to authenticate.")
+                creds = open_oauth_web_page(api_scope)
 
             if not creds:
-                log("oAuth process times out or was aborted. Skipping sync.")
+                log("oAuth process timed out or was aborted. Skipping sync.")
                 return
 
             # elif not creds or not creds.valid or creds.expired or creds.refresh_token:
                 # if creds and creds.expired and creds.refresh_token:
                 #     log("The credentials existed, but needed a refresh.")
                 #     try:
-                #         creds.refresh(Request())
+                #        creds.refresh(Request())
                 #     except Exception as e:
 
                 #         log("Exception caught when refreshing request: " + str(e))
@@ -202,7 +211,7 @@ def open_oauth_web_page(api_scope):
     pool = ThreadPool()
     auth_thread = pool.apply_async(
         func=flow.run_local_server,
-        kwds={'port': 0}
+        kwds={'port': 0, 'prompt': 'consent'}
     )
     pool.close()
     try:
