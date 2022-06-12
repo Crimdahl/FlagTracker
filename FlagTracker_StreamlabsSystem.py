@@ -41,7 +41,7 @@ script_settings = None
 logging.basicConfig(
     filename=LOG_PATH,
     level=logging.DEBUG,
-    format="%(asctime)s | %(funcName)s %(lineno)d | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(funcName)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %I:%M:%S %p"
 )
 log_file = None
@@ -372,19 +372,19 @@ def Execute(data):
                                 target.setUsername(get_attribute("Username", attribute))
                                 changes = True
                             except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc)
+                                logging.critical(traceback.print_exc())
                         if "message" in attribute.lower():
                             try:
                                 target.setMessage(get_attribute("Message", attribute))
                                 changes = True
                             except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc)
+                                logging.critical(traceback.print_exc())
                         if "game" in attribute.lower():
                             try:
                                 target.setGame(get_attribute("Game", attribute))
                                 changes = True
                             except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc)
+                                logging.critical(traceback.print_exc())
                     # Save the modified redemptions. This method also saves to Google Sheets if enabled,
                     # so no additional logic is required to modify entries in Google Sheets.
                     if changes: 
@@ -402,11 +402,12 @@ def Execute(data):
                 except Exception as e:
                     if isinstance(e, IndexError):
                         logging.error("A bad redemption index was supplied to the Edit argument: " +
-                                      traceback.print_exc)
+                                      traceback.print_exc())
                     elif isinstance(e, ValueError):
-                        logging.error("A bad value was supplied to the Edit argument: " + traceback.print_exc)
+                        logging.error("A bad value was supplied to the Edit argument: " + traceback.print_exc())
                     else:
-                        logging.critical("The Edit argument generated an unexpected exception: " + traceback.print_exc)
+                        logging.critical("The Edit argument generated an unexpected exception: " +
+                                         traceback.print_exc())
             else:
                 logging.error("Too few parameters provided to Edit argument: " + str(data.Message))
                 if script_settings.EnableResponses:
@@ -463,7 +464,7 @@ def ReloadSettings(jsonData):
         if script_settings.EnableDebug:
             logging.debug("Settings saved and applied successfully.")
     except Exception as e:
-        logging.critical(traceback.print_exc)
+        logging.critical(traceback.print_exc())
         raise e
     return
 
@@ -522,7 +523,7 @@ def event_receiver_connected(sender, e):
             logging.debug("Method successfully completed.")
         return
     except Exception as e:
-        logging.critical(traceback.print_exc)
+        logging.critical(traceback.print_exc())
         raise e
 
 
@@ -568,7 +569,7 @@ def event_receiver_reward_redeemed(sender, e):
         if script_settings.EnableDebug:
             logging.debug("Method successfully completed.")
     except Exception as e:
-        logging.critical(traceback.print_exc)
+        logging.critical(traceback.print_exc())
         raise e
     return
 
