@@ -532,8 +532,8 @@ def event_receiver_reward_redeemed(sender, e):
         if script_settings.EnableDebug:
             logging.debug("Channel Point Redemption Triggered")
             # logging.debug("List of attributes and methods in the event handler: " + str(dir(e)))
-            logging.debug("Channel point reward " + str(e.RewardTitle) +
-                          " has been redeemed with status " + str(e.Status) + ".")
+        logging.info("Channel point reward " + str(e.RewardTitle) +
+                     " has been redeemed with status " + str(e.Status) + ".")
 
         if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in \
                 [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
@@ -551,15 +551,13 @@ def event_receiver_reward_redeemed(sender, e):
                 in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
             # Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there
             # is a matching redemption in the queue that can be automatically removed.
-            if script_settings.EnableDebug:
-                logging.debug("Fulfilled redemption matches a reward name. "
-                              "Attempting to auto-remove the redemption from the queue.")
+            logging.info("Fulfilled redemption matches a reward name. "
+                         "Attempting to auto-remove the redemption from the queue.")
             for i in range(len(redemptions)):
                 if redemptions[i].Username == e.DisplayName and redemptions[i].Message == e.Message:
                     redemptions.pop(i)
                     save_redemptions()
-                    if script_settings.EnableDebug:
-                        logging.debug("Redemption at index " + str(i) + " automatically removed from the queue.")
+                    logging.info("Redemption at index " + str(i) + " automatically removed from the queue.")
                     return
             if script_settings.EnableDebug:
                 logging.debug("No matching redemption found.")
@@ -611,12 +609,12 @@ def reward_redeemed_worker(reward, message, data_username):
 
 def unload():
     # Disconnect EventReceiver cleanly
-    logging.info("Redemption event listener being unloaded.")
+    logging.info("Redemption event listener being disconnected.")
     try:
         global event_receiver
         if event_receiver:
             event_receiver.Disconnect()
-            logging.info("Redemption event listener unloaded.")
+            logging.info("Redemption event listener disconnected.")
             event_receiver = None
     except:
         logging.info("Event receiver already disconnected")
@@ -674,7 +672,7 @@ def save_redemptions():
             # When writing the Questions to disk, use the Question.toJSON() function
             json.dump(redemptions, outfile, indent=4, default=lambda q: q.toJSON())
             outfile.truncate()
-            logging.info("Redemption objects written to redemptions.json.")
+            logging.info("Redemptions saved to redemptions.json.")
 
         # Because of chatbot limitations, a secondary, external script is run to take the json file and upload
         # the redemption information to a Google Sheet. The settings file is shared between scripts.
@@ -711,10 +709,7 @@ def load_redemptions():
                             Message=redemption["Message"]
                         )
                     )
-                if script_settings.EnableDebug:
-                    logging.debug(str(len(redemptions)) + " redemptions successfully loaded from redemptions.json")
-                if script_settings.EnableDebug:
-                    log("Redemptions loaded: " + str(len(redemptions)))
+                logging.info(str(len(redemptions)) + " redemption(s) loaded from redemptions.json")
         except Exception as e:
             logging.critical("ERROR loading redemptions from redemptions.json: " + str(e.message))
             raise e
