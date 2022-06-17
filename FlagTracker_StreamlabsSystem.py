@@ -26,7 +26,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.5"
+Version = "v1.5"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -436,7 +436,29 @@ def Execute(data):
             if script_settings.EnableDebug:
                 logging.debug("Version argument received.")
             global Version
-            post("Flagtracker version " + str(Version))
+            try:
+                result = json.loads(Parent.GetRequest("https://api.github.com/repos/Crimdahl/FlagTracker/releases", {}))
+                newest_version = None
+                for index, asset in enumerate(json.loads(result['response'])):
+                    try:
+                        if not asset['prerelease'] and "beta" not in asset['tag_name']:
+                            newest_version = asset['tag_name']
+                            logging.debug("Non-beta asset found: " + str(newest_version))
+                            break
+                        else:
+                            logging.debug("Beta asset found: " + str(asset['tag_name']))
+                    except KeyError:
+                        logging.debug("KeyError for index " + str(index))
+                        continue
+                if newest_version:
+                    if script_settings.EnableDebug:
+                        logging.debug(str(Version[1:]) + " >= " + str(newest_version[1:]) + "?")
+                if newest_version and (float(newest_version[1:]) >= float(Version[1:])):
+                    post("Flagtracker version " + str(Version) + ". The latest version is " + str(newest_version) + ".")
+                else:
+                    post("Flagtracker version " + str(Version) + ". You have the latest version.")
+            except Exception:
+                logging.critical(traceback.print_exc())
 
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
