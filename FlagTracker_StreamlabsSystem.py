@@ -26,7 +26,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "1.2.8-Beta"
+Version = "1.5"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -41,7 +41,7 @@ script_settings = None
 logging.basicConfig(
     filename=LOG_PATH,
     level=logging.DEBUG,
-    format="%(asctime)s | %(funcName)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(funcName)s |  %(message)s",
     datefmt="%Y-%m-%d %I:%M:%S %p"
 )
 log_file = None
@@ -430,6 +430,13 @@ def Execute(data):
                     post("The updater was not run - Google Sheets is disabled.")
                 if script_settings.EnableDebug:
                     logging.debug("GoogleSheetsUpdater skipped - Google Sheets is disabled.")
+        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " version")
+              and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
+                   or user_id == "216768170")):
+            if script_settings.EnableDebug:
+                logging.debug("Version argument received.")
+            global Version
+            post("Flagtracker version " + str(Version))
 
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
@@ -497,8 +504,6 @@ def start():
 
 
 def event_receiver_connected(sender, e):
-    sender
-    e
     try:
         #  Get Channel ID for Username
         headers = {
@@ -512,19 +517,14 @@ def event_receiver_connected(sender, e):
 
         user = json.loads(result["response"])
         user_id = user["data"][0]["id"]
-
-        if script_settings.EnableDebug:
-            logging.debug("Channel owner's User ID: " + str(user_id))
-
         event_receiver.ListenToRewards(user_id)
         event_receiver.SendTopics(script_settings.TwitchOAuthToken)
 
         if script_settings.EnableDebug:
             logging.debug("Method successfully completed.")
         return
-    except Exception as e:
+    except Exception:
         logging.critical(traceback.print_exc())
-        raise e
 
 
 def event_receiver_reward_redeemed(sender, e):
