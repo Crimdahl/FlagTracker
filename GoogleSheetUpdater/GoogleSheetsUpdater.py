@@ -117,47 +117,21 @@ def main():
             # time.
             if os.path.exists(token_path):
                 log("Token file found at " + token_path)
-                try:
-                    creds = Credentials.from_authorized_user_file(token_path, api_scope)
-                except ValueError as e:
-                    log("oAuth credentials exist, but are not valid: " + str(e) +
-                        " Opening browser window to authenticate.")
-                    creds = open_oauth_web_page(api_scope)
+                creds = Credentials.from_authorized_user_file(token_path, api_scope)
             #
-            #   BEGIN AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
+            #   BEGIN AREA OF SCRIPT I DO NOT FULLY UNDERSTAND
             #
             # If there are no (valid) credentials available, let the user log in.
-            if not creds:
-                log("oAuth credentials did not exist. Opening browser window to authenticate.")
-                creds = open_oauth_web_page(api_scope)
-            elif creds.expired:
-                try:
-                    log("oAuth credentials exist, but required a refresh.")
-                    creds.refresh(Request())
-                except RefreshError:
-                    if "ExpiredTokenAction" in settings and settings["ExpiredTokenAction"] == "Open oAuth Page":
-                        creds = open_oauth_web_page(api_scope)
-                    else:
-                        log("Skipping sync: the oAuth token is expired, but script settings are not set to"
-                            "automatically open the oAuth page.")
-
-            elif not creds.valid:
-                log("oAuth credentials exist, but are not valid. Opening browser window to authenticate.")
-                creds = open_oauth_web_page(api_scope)
-
-            if not creds:
-                log("oAuth process timed out or was aborted. Skipping sync.")
-                return
-
-            # elif not creds or not creds.valid or creds.expired or creds.refresh_token:
-                # if creds and creds.expired and creds.refresh_token:
-                #     log("The credentials existed, but needed a refresh.")
-                #     try:
-                #        creds.refresh(Request())
-                #     except Exception as e:
-
-                #         log("Exception caught when refreshing request: " + str(e))
-                # else:
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    log("The credentials existed, but needed a refresh.")
+                    try:
+                        creds.refresh(Request())
+                    except Exception as e:
+                        log("Exception caught when refreshing request: " + str(e))
+                else:
+                    log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
+                    creds = open_oauth_web_page(api_scope)
 
             log("Getting Sheets v4 API Information.")
             api = None
