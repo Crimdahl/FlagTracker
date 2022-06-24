@@ -26,7 +26,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v1.5"
+Version = "v1.5.1"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -452,8 +452,8 @@ def Execute(data):
                         continue
                 if newest_version:
                     if script_settings.EnableDebug:
-                        logging.debug(str(Version[1:]) + " >= " + str(newest_version[1:]) + "?")
-                if newest_version and (float(newest_version[1:]) >= float(Version[1:])):
+                        logging.debug(str(Version[1:]) + " > " + str(newest_version[1:]) + "?")
+                if newest_version and (float(newest_version[1:]) > float(Version[1:])):
                     post("Flagtracker version " + str(Version) + ". The latest version is " + str(newest_version) + ".")
                 else:
                     post("Flagtracker version " + str(Version) + ". You have the latest version.")
@@ -535,7 +535,10 @@ def event_receiver_connected(sender, e):
         result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" +
                                               Parent.GetChannelName(), headers))
 
+        log("Receiver connection result: " + str(result))
         logging.info("Receiver connection result: " + str(result))
+        if result['status'] == 401:
+            post("Flagtracker connection unauthorized. Please check your Twitch token in script settings.")
 
         user = json.loads(result["response"])
         user_id = user["data"][0]["id"]
@@ -545,8 +548,8 @@ def event_receiver_connected(sender, e):
         if script_settings.EnableDebug:
             logging.debug("Method successfully completed.")
         return
-    except Exception:
-        logging.critical(traceback.print_exc())
+    except Exception as e:
+        logging.critical(str(e))
 
 
 def event_receiver_reward_redeemed(sender, e):
