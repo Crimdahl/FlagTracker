@@ -26,7 +26,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v1.5.1"
+Version = "v1.5.2"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)

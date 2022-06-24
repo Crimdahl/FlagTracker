@@ -15,7 +15,7 @@ from google.auth.exceptions import RefreshError
 #   Website = "https://www.twitch.tv/Crimdahl"
 #   Description = "Submits flags in a .json file to Google Sheets."
 #   Creator = "Crimdahl"
-#   Version = "1.2.5-Beta"
+#   Version = "1.5.2"
 
 script_run_path = os.path.dirname(os.path.abspath(__file__))
 if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
@@ -145,7 +145,7 @@ def main():
 
             service = build_from_document(api, credentials=creds)
             #
-            #   END AREA OF SCRIPT I DO NOT CURRENTLY UNDERSTAND
+            #   END AREA OF SCRIPT I DO NOT FULLY UNDERSTAND
             #
 
             # Call the Sheets API
