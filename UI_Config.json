@@ -7,22 +7,6 @@
 		"tooltip": "Indicates whether the script only accepts commands while you are live.",
 		"group": "General"
 	},
-	"DisplayPermissions": {
-		"type": "dropdown",
-		"value": "Everyone",
-		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor" ],
-		"label": "Display Permissions",
-		"tooltip": "The permission level required to display the queue with !communityqueue.",
-		"group": "General"
-	},
-	"ModifyPermissions": {
-		"type": "dropdown",
-		"value": "Moderator",
-		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor" ],
-		"label": "Modify Permissions",
-		"tooltip": "The permission level required to modify the queue with !communityqueue remove, etc..",
-		"group": "General"
-	},
 	"CommandName": {
 		"type": "textbox",
 		"value": "queue",
@@ -44,6 +28,101 @@
 		"tooltip": "Specify the names of the Channel Point Redemptions that will trigger this event. Separate names with commas.",
 		"group": "General"
 	},
+	"ReconnectionAttempts": {
+		"type": "numberbox",
+		"value": "5",
+		"label": "Reconnection Attempts",
+		"tooltip": "The number times the script will attempt to reconnect when disconnected. Reconnections attempts happen once per minute.",
+		"group": "General"
+	},
+	"HelpDisplayPermissions": {
+		"type": "dropdown",
+		"value": "Everyone",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Help Display Permissions",
+		"tooltip": "The permission level required to display the script help functions.",
+		"group": "Permissions"
+	},
+	"QueueDisplayPermissions": {
+		"type": "dropdown",
+		"value": "Everyone",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Queue Display Permissions",
+		"tooltip": "The permission level required to display the queue or Google Sheet link.",
+		"group": "Permissions"
+	},
+	"QueueFindPermissions": {
+		"type": "dropdown",
+		"value": "Everyone",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Queue Find Permissions",
+		"tooltip": "The permission level required to use the Find subcommand to find a user in the queue.",
+		"group": "Permissions"
+	},
+	"QueueRemovePermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Queue Remove Permissions",
+		"tooltip": "The permission level required to use the Remove subcommand to remove redemptions from the queue.",
+		"group": "Permissions"
+	},
+	"QueueAddPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Queue Add Permissions",
+		"tooltip": "The permission level required to use the Add subcommand to add redemptions to the queue.",
+		"group": "Permissions"
+	},
+	"QueueEditPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Queue Edit Permissions",
+		"tooltip": "The permission level required to use the Edit subcommand to edit existing redemptions in the queue.",
+		"group": "Permissions"
+	},
+	"GoogleUpdaterPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Google Updater Manual Permissions",
+		"tooltip": "The permission level required to use the Updater subcommand to manually start the GoogleSheetsUpdater.",
+		"group": "Permissions"
+	},
+	"VersionCheckPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Version Check Permissions",
+		"tooltip": "The permission level required to use the Version subcommand to check for script updates.",
+		"group": "Permissions"
+	},
+	"UptimeDisplayPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Uptime Display Permissions",
+		"tooltip": "The permission level required to use the Uptime subcommand to display the script's connectivity status.",
+		"group": "Permissions"
+	},
+	"ReconnectPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Manual Reconnect Permissions",
+		"tooltip": "The permission level required to use the Reconnect subcommand to attempt to reconnect the script to Twitch.",
+		"group": "Permissions"
+	},
+	"GistUploadPermissions": {
+		"type": "dropdown",
+		"value": "Caster",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Manual Gist Upload Permissions",
+		"tooltip": "The permission level required to use the Gist subcommand to upload the current log file to Crimdahl's Gist.",
+		"group": "Permissions"
+	},
 	"TwitchOAuthToken": {
 		"type": "textbox",
 		"value": "",
@@ -64,14 +143,6 @@
 		"value": false,
 		"label": "Enable Google Sheets",
 		"tooltip": "Enable or disable updating a Google Sheet with your redemption information.",
-		"group": "Google Sheets Settings"
-	},
-	"ExpiredTokenAction": {
-		"type": "dropdown",
-		"value": "Nothing",
-		"items": [ "Nothing", "Open oAuth Page" ],
-		"label": "Expired Token Action",
-		"tooltip": "When the oAuth token is expired, do you want to do nothing, post an alert in chat, or open a web page to generate a new token?",
 		"group": "Google Sheets Settings"
 	},
 	"SpreadsheetID": {
@@ -102,11 +173,18 @@
 		"tooltip": "Enable or disable bot responses to flag redemptions.",
 		"group": "Output Settings"
 	},
-	"EnableDebug": {
+	"RetainLogFiles": {
 		"type": "checkbox",
 		"value": false,
-		"label": "Enable Debug",
-		"tooltip": "Enable or disable debug logs.",
+		"label": "Retain Logs Locally",
+		"tooltip": "Enable or disable the automatic deletion of log files.",
+		"group": "Output Settings"
+	},
+	"AllowGistUpload": {
+		"type": "checkbox",
+		"value": true,
+		"label": "Allow Log Upload to Gist",
+		"tooltip": "Enable or disable the upload of the log file to Crimdahl's gist when the stream ends.",
 		"group": "Output Settings"
 	},
 	"btnreadme": {

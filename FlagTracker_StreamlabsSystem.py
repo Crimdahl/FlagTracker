@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
+import sys
 import clr
 import codecs
-import datetime
 import io
 import json
 import os
-import sys
 import threading
 import traceback
 import logging
+from time import strftime
+from datetime import datetime, timedelta
 
-sys.platform = "win32"
+
 # Try/Except here to avoid exceptions when __main__ code at the bottom
 try:
     clr.AddReference("IronPython.Modules.dll")
@@ -19,7 +20,7 @@ try:
                                                "TwitchLib.PubSub.dll"))
     from TwitchLib.PubSub import TwitchPubSub
 except:
-    pass
+    raise RuntimeError("Failed to import TwitchPubSub.")
 
 #   Script Information <Required>
 ScriptName = "FlagTracker"
@@ -33,7 +34,8 @@ SCRIPT_PATH = os.path.dirname(__file__)
 GOOGLE_UPDATER_PATH = os.path.join(SCRIPT_PATH, "GoogleSheetsUpdater.exe")
 SETTINGS_PATH = os.path.join(SCRIPT_PATH, "settings.json")
 README_PATH = os.path.join(SCRIPT_PATH, "Readme.md")
-LOG_PATH = os.path.join(SCRIPT_PATH, "flagtrackerlog.txt")
+LOG_PATH = os.path.join(SCRIPT_PATH, "flagtrackerlog-" +
+                        strftime("%Y%m%d-%H%M%S") + ".txt")
 REDEMPTIONS_PATH = os.path.join(SCRIPT_PATH, "redemptions.json")
 TOKEN_PATH = os.path.join(SCRIPT_PATH, "token.json")
 
@@ -50,7 +52,11 @@ redemptions = []
 event_receiver = None
 thread_queue = []
 thread = None
-play_next_at = datetime.datetime.now()
+play_next_at = datetime.now()
+
+is_stream_live = False
+script_uptime = None
+retry_count = 0
 
 
 # Define Redemptions
@@ -60,56 +66,68 @@ class Redemption(object):
         self.Game = kwargs["Game"] if "Game" in kwargs else "Unknown"
         self.Message = kwargs["Message"] if "Message" in kwargs else "Unknown"
 
-    def toJSON(self):
+    def to_json(self):
         return {"Username": self.Username, "Game": self.Game, "Message": self.Message}
 
-    def setGame(self, value):
+    def set_game(self, value):
         self.Game = value
 
-    def setUsername(self, value):
+    def set_username(self, value):
         self.Username = value
 
-    def setMessage(self, value):
+    def set_message(self, value):
         self.Message = value
 
     def __str__(self):
         return "Username: " + str(self.Username) + ", Game: " + str(self.Game) + ", Message: " + str(self.Message)
-    
+
 
 # Define Settings. If there is no settings file created, then use default values in else statement.
 class Settings(object):
-    def __init__(self, SettingsPath=None):
-        if SettingsPath and os.path.isfile(SettingsPath):
-            with codecs.open(SettingsPath, encoding="utf-8-sig", mode="r") as f:
+    def __init__(self, settings_path=None):
+        if settings_path and os.path.isfile(settings_path):
+            with codecs.open(settings_path, encoding="utf-8-sig", mode="r") as f:
                 self.__dict__ = json.load(f, encoding="utf-8")
         else:
+            # Permission Settings
+            self.HelpDisplayPermissions = "Everyone"
+            self.QueueDisplayPermissions = "Everyone"
+            self.QueueFindPermissions = "Everyone"
+            self.QueueRemovePermissions = "Moderator"
+            self.QueueAddPermissions = "Moderator"
+            self.QueueEditPermissions = "Moderator"
+            self.GoogleUpdaterPermissions = "Moderator"
+            self.VersionCheckPermissions = "Moderator"
+            self.UptimeDisplayPermissions = "Moderator"
+            self.ReconnectPermissions = "Moderator"
+            self.GistUploadPermissions = "Caster"
+
             # Output Settings
-            self.EnableDebug = True
+            self.RetainLogFiles = False
+            self.AllowGistUpload = True
             self.EnableResponses = True
             self.DisplayMessageOnGameUnknown = False
             self.RunCommandsOnlyWhenLive = True
-            self.DisplayPermissions = "Everyone"
-            self.ModifyPermissions = "Moderator"
             self.CommandName = "queue"
             self.DisplayLimit = "10"
 
             # Twitch Settings
             self.TwitchOAuthToken = ""
             self.TwitchRewardNames = ""
+            self.ReconnectionAttempts = 5
 
             # Google Sheets Settings
             self.EnableGoogleSheets = False
-            self.ExpiredTokenAction = "Nothing"
             self.SpreadsheetID = ""
             self.Sheet = ""
 
-    def Reload(self, jsondata):
-        self.__dict__ = json.loads(jsondata, encoding="utf-8")
+    def Reload(self, data):
+        self.__dict__ = json.loads(data, encoding="utf-8")
         return
 
-    def Save(self, SettingsPath):
+    def Save(self, settings_path):
         try:
-            with codecs.open(SettingsPath, encoding="utf-8-sig", mode="w+") as f:
+            with codecs.open(settings_path, encoding="utf-8-sig", mode="w+") as f:
                 json.dump(self.__dict__, f, encoding="utf-8")
         except Exception as e:
             logging.critical(traceback.print_exc())
@@ -122,352 +140,408 @@ def Execute(data):
     user_id = get_user_id(data.RawData)
 
     # Check if the streamer is live. Still run commands if the script is set to run while offline
-    if Parent.IsLive() or not script_settings.RunCommandsOnlyWhenLive:
+    if ((Parent.IsLive() or not script_settings.RunCommandsOnlyWhenLive) and
+            str(data.Message).startswith("!" + script_settings.CommandName)):
         # Check if the message begins with "!" and the command name AND the user has permissions to run the command
-        if (str(data.Message).startswith("!" + script_settings.CommandName) and data.GetParamCount() == 1
-            and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
-                 or user_id == "216768170")):
-            if script_settings.EnableDebug:
+        if data.GetParamCount() == 1:
+            if Parent.HasPermission(data.User, script_settings.QueueDisplayPermissions, "") or user_id == "216768170":
                 logging.debug("No-argument call received.")
-            # If the user is using Google Sheets, post a link to the Google Sheet in chat
-            if script_settings.EnableGoogleSheets and script_settings.SpreadsheetID != "":
-                if script_settings.EnableDebug:
+                # If the user is using Google Sheets, post a link to the Google Sheet in chat
+                if script_settings.EnableGoogleSheets and script_settings.SpreadsheetID != "":
                     logging.debug("Displaying Google Sheets link in chat: " +
                                   "https://docs.google.com/spreadsheets/d/" + script_settings.SpreadsheetID)
-                post("https://docs.google.com/spreadsheets/d/" + script_settings.SpreadsheetID)
-                return
-            # If the user is not using Google Sheets, read lines from the json file in the script directory
-            else:
-                if script_settings.EnableDebug:
-                    logging.debug("Displaying " + str(script_settings.DisplayLimit) + " redemptions in chat.")
-                if len(redemptions) > 0:
-                    # An index is displayed with each line. The index can be referenced with other commands.
-                    index = 1
-                    for redemption in redemptions:
-                        if script_settings.DisplayMessageOnGameUnknown \
-                                and str(redemption.Game).lower().strip() == "unknown":
-                            if script_settings.EnableDebug:
-                                logging.debug(str(index) + ") " + redemption.Username + " - " + redemption.Message)
-                            post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
-                        else:
-                            if script_settings.EnableDebug:
-                                logging.debug(str(index) + ") " + redemption.Username + " - " + redemption.Game)
-                            post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
-                        index = index + 1
-                        if index > script_settings.DisplayLimit:
-                            break
+                    post("Flagtracker: https://docs.google.com/spreadsheets/d/" + script_settings.SpreadsheetID)
                     return
+                # If the user is not using Google Sheets, read lines from the json file in the script directory
                 else:
-                    if script_settings.EnableDebug:
-                        logging.debug("No redemptions displayed - the queue is empty.")
-                    post("The community queue is empty!")
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " find")
-                and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
-                     or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Find argument received.")
-            if data.GetParamCount() < 4:
-                if data.GetParamCount() == 2:
-                    # No username supplied. Search for redemptions by the user that posted the command.
-                    search_username = data.User
-                else: 
-                    # Username supplied. Search for redemptions by the supplied username
-                    search_username = data.GetParam(2)
-                if script_settings.EnableDebug:
-                    logging.debug("Searching for user " + str(search_username) + " in the queue.")
-                index = 1
-                found = False
-                for redemption in redemptions:
-                    if str(redemption.Username).lower() == str(search_username).lower():
-                        if script_settings.DisplayMessageOnGameUnknown and \
-                                str(redemption.Game).lower().strip() == "unknown":
-                            if script_settings.EnableDebug:
-                                logging.debug("Redemption found from user " +
-                                              str(search_username) + ":" + str(index) + ") " + str(redemption))
-                            post(str(index) + ") " + str(redemption))
-                        else:
-                            if script_settings.EnableDebug:
-                                logging.debug("Redemption found from user " +
-                                              str(search_username) + ":" + str(index) + ") " + str(redemption))
-                            post(str(index) + ") " + str(redemption))
-                        found = True
-                    index = index + 1
-                if not found:
-                    if script_settings.EnableDebug:
-                        logging.debug("No redemptions found for username " + str(search_username) + ".")
-                    post("No redemptions were found for the username " + str(search_username) + ".")
-                return
-            else:
-                logging.error("Too many parameters supplied with Find argument: " +
-                              str(data.Message))
-                if script_settings.EnableResponses:
-                    post("Usage: !" + script_settings.CommandName + " find <Optional Username>")
-        # Check if the user is attempting to remove an item from the queue.
-        # Uses different permissions from displaying the queue.
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " remove")
-                and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
-                     or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Remove argument received.")
-            # Check if the supplied information has three or more parameters: !command, remove, and one or more indices
-            if data.GetParamCount() >= 3: 
-                if script_settings.EnableDebug:
-                    logging.debug("Removing redemption(s)")
-                data_string = str(data.Message)
-                # Separate the indices from the rest of the message and split them by comma delimiter
-                data_array = data_string[data_string.index("remove") + len("remove"):].replace(" ", "").split(",")
-                # It is necessary to remove them from lowest index to highest index, so sort the indices first
-                # Should I just remove from highest to lowest?
-                data_array.sort()
-                if script_settings.EnableDebug:
-                    logging.debug("Removing the following from Redemptions: " + str(data_array))
-                # Keep track of the number of indices removed because we have to subtract that
-                # number from the supplied indices
-                removed_count = 1
-                try:
-                    for num in data_array:
-                        # The indices in the redemptions are 0-based,
-                        # so we can immediately subtract 1 from any user-supplied indices
-                        redemptions.pop(int(num) - removed_count)
-                        removed_count = removed_count + 1
-                    save_redemptions()
-                    if script_settings.EnableDebug:
-                        logging.debug("Successfully removed " + str(removed_count) + " redemptions.")
-                    if script_settings.EnableResponses:
-                        post("Redemption(s) successfully removed from the queue.")
-                except (ValueError, IndexError) as e:
-                    # Log an error if the index is either a non-integer or is outside of the range of the redemptions
-                    if isinstance(e, IndexError):
-                        logging.error(traceback.format_exc())
-                        if script_settings.EnableResponses:
-                            post("Error: Supplied index was out of range. The valid range is 1-" +
-                                 str(len(redemptions)) + ".")
+                    logging.debug("Displaying " + str(script_settings.DisplayLimit) + " redemptions in chat.")
+                    if len(redemptions) > 0:
+                        # An index is displayed with each line. The index can be referenced with other commands.
+                        index = 1
+                        for redemption in redemptions:
+                            if script_settings.DisplayMessageOnGameUnknown \
+                                    and str(redemption.Game).lower().strip() == "unknown":
+                                post(str(index) + ") " + redemption.Username + " - " + redemption.Message)
+                            else:
+                                post(str(index) + ") " + redemption.Username + " - " + redemption.Game)
+                            index = index + 1
+                            if index > script_settings.DisplayLimit:
+                                break
+                        return
                     else:
-                        # Unanticipated error
-                        logging.critical(traceback.format_exc())
+                        post("Flagtracker: The community queue is empty!")
             else:
-                # If the supplied command is just "!<command name> remove" and chat responses are enabled,
-                # display the command usage text in chat.
-                logging.error("Too few parameters provided to Remove argument: " + str(data.Message))
-                if script_settings.EnableResponses:
-                    post("Usage: !" + script_settings.CommandName + " remove <Comma-Separated Integer Indexes>")
-        # Check if the user is attempting to add an item to the queue.
-        # Uses different permissions from displaying the queue.
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " add")
-                and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
-                     or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Add argument received.")
-            # Check if the supplied information has three or more parameters:
-            # !command, add, and one or more sets of information
-            if data.GetParamCount() >= 3: 
-                data_string = str(data.Message)
-                # Separate the information sets from the rest of the message and split them by pipe delimiter
-                data_array = data_string[data_string.index("add") + len("add"):].split("|")
-                error_data_array = []
-                if script_settings.EnableDebug:
-                    logging.debug("Adding redemptions: " + str(data_array))
-                redemptions_added = 0
-                for info in data_array:
-                    # Create a redemption object with the Username, Message, and Game
-                    try:
-                        # Username is mandatory
-                        new_user = get_attribute("Username", info)
-                        # Message is optional
-                        new_message = "No message."
-                        try:
-                            new_message = get_attribute("Message", info)
-                        except (AttributeError, ValueError):
-                            pass
-                        # Game is optional
-                        new_game = "Unknown"
-                        try:
-                            new_game = get_attribute("Game", info)
-                        except (AttributeError, ValueError):
-                            pass
-                        
-                        new_redemption = Redemption(Username=new_user, Message=new_message, Game=new_game)
-                        if "index:" in info:
-                            insertion_index = int(get_attribute("Index", info)) - 1
-                            redemptions.insert(insertion_index, new_redemption)
-                            if script_settings.EnableDebug:
-                                logging.debug("Redemption inserted at index " + str(insertion_index) + ": " +
-                                              str(new_redemption))
-                            redemptions_added = redemptions_added + 1
-                        else:        
-                            redemptions.append(new_redemption)
-                            if script_settings.EnableDebug:
-                                logging.debug("Redemption appended: " + str(new_redemption))
-                            redemptions_added = redemptions_added + 1
-                    except (AttributeError, ValueError):
-                        error_data_array.append(info)
-                        logging.critical(traceback.format_exc())
-                        continue
-                # Save the new redemptions. This method also saves to Google Sheets if enabled,
-                # so no additional logic is required to add entries to Google Sheets.
-                if redemptions_added > 0:
-                    save_redemptions()
-                    if redemptions_added == len(data_array):
-                        if script_settings.EnableDebug:
-                            logging.debug(str(redemptions_added) + " redemptions were successfully added to the queue.")
-                    else:
-                        if script_settings.EnableResponses:
-                            post("Successfully added " + str(redemptions_added) +
-                                 " redemption(s) to the queue, but failed to add " +
-                                 str(len(data_array) - redemptions_added) + ". Please see logs for error details.")
-                        if error_data_array:
-                            logging.error(str(redemptions_added) +
-                                          " redemptions were successfully added to the queue out of " +
-                                          str(len(data_array)) +
-                                          " attempted. The following redemptions encountered errors: " +
-                                          str(error_data_array))
+                post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+        else:
+            subcommand = data.GetParam(1)
+            if subcommand == "find":
+                if (Parent.HasPermission(data.User, script_settings.QueueFindPermissions, "") or
+                                         user_id == "216768170"):
+                    if data.GetParamCount() < 4:
+                        if data.GetParamCount() == 2:
+                            # No username supplied. Search for redemptions by the user that posted the command.
+                            search_username = data.User
                         else:
-                            logging.critical(str(redemptions_added) +
-                                             " redemptions were successfully added to the queue out of " +
-                                             str(len(data_array)) +
-                                             " attempted. Failed to document error redemptions.")
-                        
-                    if script_settings.EnableResponses:
-                        post("Successfully added " + str(redemptions_added) + " redemption(s) to the queue.")
+                            # Username supplied. Search for redemptions by the supplied username
+                            search_username = data.GetParam(2)
+                        logging.debug("Searching for user " + str(search_username) + " in the queue.")
+                        index = 1
+                        found = False
+                        for redemption in redemptions:
+                            if str(redemption.Username).lower() == str(search_username).lower():
+                                if script_settings.DisplayMessageOnGameUnknown and \
+                                        str(redemption.Game).lower().strip() == "unknown":
+                                    post(str(index) + ") " + str(redemption))
+                                else:
+                                    post(str(index) + ") " + str(redemption))
+                                found = True
+                            index = index + 1
+                        if not found:
+                            post("Flagtracker: No redemptions were found for the username " + str(search_username) + ".")
+                        return
+                    else:
+                        logging.error("Too many parameters supplied with Find argument: " +
+                                      str(data.Message))
+                        if script_settings.EnableResponses:
+                            post("Usage: !" + script_settings.CommandName + " find {Optional Username}")
                 else:
-                    if error_data_array:
-                        logging.error("Failed to add " + str(len(data_array)) +
-                                      " redemptions to the queue: " + str(error_data_array))
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "remove":
+                if (Parent.HasPermission(data.User, script_settings.QueueRemovePermissions, "") or
+                                         user_id == "216768170"):
+                    logging.debug("Remove argument received.")
+                    # Check if the supplied information has three or more parameters:
+                    #   !command, remove, and one or more indices
+                    if data.GetParamCount() >= 3:
+                        logging.debug("Removing redemption(s)")
+                        data_string = str(data.Message)
+                        # Separate the indices from the rest of the message and split them by comma delimiter
+                        data_array = data_string[data_string.index("remove") +
+                                                 len("remove"):].replace(" ", "").split(",")
+                        # It is necessary to remove them from lowest index to highest index, so sort the indices first
+                        # Should I just remove from highest to lowest?
+                        data_array.sort()
+                        logging.debug("Removing the following from Redemptions: " + str(data_array))
+                        # Keep track of the number of indices removed because we have to subtract that
+                        # number from the supplied indices
+                        removed_count = 1
+                        try:
+                            for num in data_array:
+                                # The indices in the redemptions are 0-based,
+                                # so we can immediately subtract 1 from any user-supplied indices
+                                redemptions.pop(int(num) - removed_count)
+                                removed_count = removed_count + 1
+                            save_redemptions()
+                            logging.debug("Successfully removed " + str(removed_count) + " redemptions.")
+                            post("Flagtracker: Redemption(s) successfully removed.")
+                        except (ValueError, IndexError) as e:
+                            # Log an error if the index is either a non-integer or is outside of the
+                            #   range of the redemptions
+                            if isinstance(e, IndexError):
+                                logging.error(traceback.format_exc())
+                                post("Flagtracker: Supplied index was out of range. The valid range is 1-" +
+                                     str(len(redemptions)) + ".")
+                            else:
+                                # Unanticipated error
+                                logging.critical(traceback.format_exc())
                     else:
-                        logging.critical("Failed to add " + str(len(data_array)) +
-                                         " redemptions to the queue. Failed to document error redemptions.")
-                    if script_settings.EnableResponses:
-                        post("Failed to add all redemptions to the queue. Please see the log file for error details.")
-            else:
-                # If the supplied command is just "!<command name> remove" and chat responses are enabled,
-                # display the command usage text in chat.
-                if script_settings.EnableDebug:
-                    logging.error("Too few parameters provided to Add argument: " + str(data.Message))
-                if script_settings.EnableResponses:
-                    post("Usage: !" + script_settings.CommandName +
-                         " add Username:<UserName>, Message:<Message>, (Game:<Game>) | Username:<UserName>, ...")
-        # Check if the user is attempting to edit an item in the queue.
-        # Uses different permissions from displaying the queue.
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " edit")
-                and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
-                     or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Edit argument received.")
-            # This command takes 3 or more parameters: !<command name>, an index, and attributes to edit at that index
-            if data.GetParamCount() >= 3: 
-                try:
-                    changes = False
-                    # Get the index and a set of comma-separated attributes from the message
-                    index = int(data.GetParam(2))
-                    data = str(data.Message)[len("!" + script_settings.CommandName + " edit " + str(index)):].split("|")
-                    if script_settings.EnableDebug:
-                        logging.debug("Data supplied to Edit argument: " + str(data))
-                    target = redemptions[index - 1]
+                        # If the supplied command is just "!<command name> remove" and chat responses are enabled,
+                        # display the command usage text in chat.
+                        logging.error("Too few parameters provided to Remove argument: " + str(data.Message))
+                        if script_settings.EnableResponses:
+                            post("Usage: !" + script_settings.CommandName + " remove {index}, {index}")
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "add":
+                if Parent.HasPermission(data.User, script_settings.QueueAddPermissions, "") or user_id == "216768170":
+                    logging.debug("Add argument received.")
+                    # Check if the supplied information has three or more parameters:
+                    # !command, add, and one or more sets of information
+                    if data.GetParamCount() >= 3:
+                        data_string = str(data.Message)
+                        # Separate the information sets from the rest of the message and split them by pipe delimiter
+                        data_array = data_string[data_string.index("add") + len("add"):].split("|")
+                        error_data_array = []
+                        logging.debug("Adding redemptions: " + str(data_array))
+                        redemptions_added = 0
+                        for info in data_array:
+                            # Create a redemption object with the Username, Message, and Game
+                            try:
+                                # Username is mandatory
+                                new_user = get_attribute("Username", info)
+                                # Message is optional
+                                new_message = "No message."
+                                try:
+                                    new_message = get_attribute("Message", info)
+                                except (AttributeError, ValueError):
+                                    pass
+                                # Game is optional
+                                new_game = "Unknown"
+                                try:
+                                    new_game = get_attribute("Game", info)
+                                except (AttributeError, ValueError):
+                                    pass
 
-                    # Attempt to modify each type of attribute. Do nothing if the attribute is not found.
-                    # Save only if changes happen.
-                    for attribute in data:
-                        if "username" in attribute.lower():
-                            try:
-                                target.setUsername(get_attribute("Username", attribute))
-                                changes = True
+                                new_redemption = Redemption(Username=new_user, Message=new_message, Game=new_game)
+                                if "index:" in info:
+                                    insertion_index = int(get_attribute("Index", info)) - 1
+                                    redemptions.insert(insertion_index, new_redemption)
+                                    logging.debug("Redemption inserted at index " + str(insertion_index) + ": " +
+                                                  str(new_redemption))
+                                    redemptions_added = redemptions_added + 1
+                                else:
+                                    redemptions.append(new_redemption)
+                                    logging.debug("Redemption appended: " + str(new_redemption))
+                                    redemptions_added = redemptions_added + 1
                             except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc())
-                        if "message" in attribute.lower():
-                            try:
-                                target.setMessage(get_attribute("Message", attribute))
-                                changes = True
-                            except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc())
-                        if "game" in attribute.lower():
-                            try:
-                                target.setGame(get_attribute("Game", attribute))
-                                changes = True
-                            except (AttributeError, ValueError):
-                                logging.critical(traceback.print_exc())
-                    # Save the modified redemptions. This method also saves to Google Sheets if enabled,
-                    # so no additional logic is required to modify entries in Google Sheets.
-                    if changes: 
-                        save_redemptions()
-                        if script_settings.EnableDebug:
-                            logging.debug("Successfully modified redemption.")
-                        if script_settings.EnableResponses:
-                            post("Redemption successfully modified.")
-                    else:
-                        if script_settings.EnableResponses:
-                            post("Failed to modify the redemption at index " +
-                                 str(index) + ". Please use '!" +
-                                 script_settings.CommandName + " edit' to see command usage.")
-                        logging.error("Failed to the modify redemption at index " + str(index))
-                except Exception as e:
-                    if isinstance(e, IndexError):
-                        logging.error("A bad redemption index was supplied to the Edit argument: " +
-                                      traceback.print_exc())
-                    elif isinstance(e, ValueError):
-                        logging.error("A bad value was supplied to the Edit argument: " + traceback.print_exc())
-                    else:
-                        logging.critical("The Edit argument generated an unexpected exception: " +
-                                         traceback.print_exc())
-            else:
-                logging.error("Too few parameters provided to Edit argument: " + str(data.Message))
-                if script_settings.EnableResponses:
-                    post("Usage: !" + script_settings.CommandName +
-                         " edit <Index> <Username/Game/Message>:<Value>(|<Username/Game/Message>:<Value>|...)")
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " updater")
-              and (Parent.HasPermission(data.User, script_settings.ModifyPermissions, "")
-                   or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Updater argument received.")
-            if script_settings.EnableGoogleSheets:
-                update_google_sheet()
-                if script_settings.EnableResponses:
-                    post("Google Sheets Updater executed. "
-                         "If no change occurs, the Google Sheets oAuth token may be expired.")
-                if script_settings.EnableDebug:
-                    logging.debug("GoogleSheetsUpdater was successfully started.")
-            else:
-                if script_settings.EnableResponses:
-                    post("The updater was not run - Google Sheets is disabled.")
-                if script_settings.EnableDebug:
-                    logging.debug("GoogleSheetsUpdater skipped - Google Sheets is disabled.")
-        elif (str.startswith(data.Message, "!" + script_settings.CommandName + " version")
-              and (Parent.HasPermission(data.User, script_settings.DisplayPermissions, "")
-                   or user_id == "216768170")):
-            if script_settings.EnableDebug:
-                logging.debug("Version argument received.")
-            global Version
-            try:
-                result = json.loads(Parent.GetRequest("https://api.github.com/repos/Crimdahl/FlagTracker/releases", {}))
-                newest_version = None
-                for index, asset in enumerate(json.loads(result['response'])):
-                    try:
-                        if not asset['prerelease'] and "beta" not in asset['tag_name']:
-                            newest_version = asset['tag_name']
-                            logging.debug("Non-beta asset found: " + str(newest_version))
-                            break
+                                error_data_array.append(info)
+                                logging.critical(traceback.format_exc())
+                                continue
+                        # Save the new redemptions. This method also saves to Google Sheets if enabled,
+                        # so no additional logic is required to add entries to Google Sheets.
+                        if redemptions_added > 0:
+                            save_redemptions()
+                            if redemptions_added == len(data_array):
+                                logging.debug(str(redemptions_added) +
+                                              " redemptions were successfully added to the queue.")
+                            else:
+                                post("Flagtracker: Successfully added " + str(redemptions_added) +
+                                     " redemption(s) to the queue, but failed to add " +
+                                     str(len(data_array) - redemptions_added) + ". Please see logs for error details.")
+                                if error_data_array:
+                                    logging.error(str(redemptions_added) +
+                                                  " redemptions were successfully added to the queue out of " +
+                                                  str(len(data_array)) +
+                                                  " attempted. The following redemptions encountered errors: " +
+                                                  str(error_data_array))
+                                else:
+                                    logging.critical(str(redemptions_added) +
+                                                     " redemptions were successfully added to the queue out of " +
+                                                     str(len(data_array)) +
+                                                     " attempted. Failed to document error redemptions.")
+
+                            post("Flagtracker: Successfully added " + str(
+                                redemptions_added) + " redemption(s) to the queue.")
                         else:
-                            logging.debug("Beta asset found: " + str(asset['tag_name']))
-                    except KeyError:
-                        logging.debug("KeyError for index " + str(index))
-                        continue
-                if newest_version:
-                    if script_settings.EnableDebug:
-                        logging.debug(str(Version[1:]) + " > " + str(newest_version[1:]) + "?")
-                if newest_version and (float(newest_version[1:]) > float(Version[1:])):
-                    post("Flagtracker version " + str(Version) + ". The latest version is " + str(newest_version) + ".")
+                            if error_data_array:
+                                logging.error("Failed to add " + str(len(data_array)) +
+                                              " redemptions to the queue: " + str(error_data_array))
+                            else:
+                                logging.critical("Failed to add " + str(len(data_array)) +
+                                                 " redemptions to the queue. Failed to document error redemptions.")
+                            post("Failed to add any redemptions to the queue. "
+                                 "Please see the log file for error details.")
+                    else:
+                        # If the supplied command is just "!<command name> remove" and chat responses are enabled,
+                        # display the command usage text in chat.
+                        logging.error("Too few parameters provided to Add argument: " + str(data.Message))
+                        if script_settings.EnableResponses:
+                            post("Usage: !" + script_settings.CommandName +
+                                 " add Username:{UserName>}, (Game:{Game}), Message:{Message}")
                 else:
-                    post("Flagtracker version " + str(Version) + ". You have the latest version.")
-            except Exception:
-                logging.critical(traceback.print_exc())
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "edit":
+                if Parent.HasPermission(data.User, script_settings.QueueEditPermissions, "") or user_id == "216768170":
+                    logging.debug("Edit argument received.")
+                    # This command takes 3 or more parameters: !<command name>, an index,
+                    #   and attributes to edit at that index
+                    if data.GetParamCount() >= 3:
+                        try:
+                            changes = False
+                            # Get the index and a set of comma-separated attributes from the message
+                            index = int(data.GetParam(2))
+                            data = str(data.Message)[len("!" + script_settings.CommandName + " edit " +
+                                                         str(index)):].split("|")
+                            logging.debug("Data supplied to Edit argument: " + str(data))
+                            target = redemptions[index - 1]
+
+                            # Attempt to modify each type of attribute. Do nothing if the attribute is not found.
+                            # Save only if changes happen.
+                            for attribute in data:
+                                if "username" in attribute.lower():
+                                    try:
+                                        target.set_username(get_attribute("Username", attribute))
+                                        changes = True
+                                    except (AttributeError, ValueError):
+                                        logging.critical(traceback.print_exc())
+                                if "message" in attribute.lower():
+                                    try:
+                                        target.set_message(get_attribute("Message", attribute))
+                                        changes = True
+                                    except (AttributeError, ValueError):
+                                        logging.critical(traceback.print_exc())
+                                if "game" in attribute.lower():
+                                    try:
+                                        target.set_game(get_attribute("Game", attribute))
+                                        changes = True
+                                    except (AttributeError, ValueError):
+                                        logging.critical(traceback.print_exc())
+                            # Save the modified redemptions. This method also saves to Google Sheets if enabled,
+                            # so no additional logic is required to modify entries in Google Sheets.
+                            if changes:
+                                save_redemptions()
+                                logging.debug("Successfully modified redemption.")
+                                post("Flagtracker: Redemption successfully modified.")
+                            else:
+                                logging.error("Failed to the modify redemption at index " + str(index) +
+                                              " with message " + str(data))
+                        except Exception as e:
+                            if isinstance(e, IndexError):
+                                logging.error("A bad redemption index was supplied to the Edit argument: " +
+                                              traceback.print_exc())
+                            elif isinstance(e, ValueError):
+                                logging.error("A bad value was supplied to the Edit argument: " + traceback.print_exc())
+                            else:
+                                logging.critical("The Edit argument generated an unexpected exception: " +
+                                                 traceback.print_exc())
+                    else:
+                        logging.error("Too few parameters provided to Edit argument: " + str(data.Message))
+                        if script_settings.EnableResponses:
+                            post("Usage: !" + script_settings.CommandName +
+                                 " edit <Index> <Username/Game/Message>:<Value>(|<Username/Game/Message>:<Value>|...)")
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "updater":
+                if (Parent.HasPermission(data.User, script_settings.GoogleUpdaterPermissions, "") or
+                                        user_id == "216768170"):
+                    logging.debug("Updater argument received.")
+                    if script_settings.EnableGoogleSheets:
+                        update_google_sheet()
+                        post("Flagtracker: Google Sheets Updater executed. "
+                             "If no change occurs, the Google Sheets oAuth token may be expired.")
+                        logging.debug("GoogleSheetsUpdater was successfully started.")
+                    else:
+                        post("Flagtracker: Google Sheets is disabled.")
+                        logging.debug("GoogleSheetsUpdater skipped - Google Sheets is disabled.")
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "version":
+                if (Parent.HasPermission(data.User, script_settings.VersionCheckPermissions, "") or
+                                         user_id == "216768170"):
+                    logging.debug("Version argument received.")
+                    global Version
+                    try:
+                        result = json.loads(
+                            Parent.GetRequest("https://api.github.com/repos/Crimdahl/FlagTracker/releases", {}))
+                        newest_version = None
+                        for index, asset in enumerate(json.loads(result['response'])):
+                            try:
+                                if not asset['prerelease'] and "beta" not in asset['tag_name']:
+                                    newest_version = asset['tag_name']
+                                    logging.debug("Non-beta asset found: " + str(newest_version))
+                                    break
+                                else:
+                                    logging.debug("Skipping beta asset: " + str(asset['tag_name']))
+                            except KeyError:
+                                logging.debug("KeyError for index " + str(index))
+                                continue
+                        if newest_version:
+                            logging.debug(str(Version[1:]) + " > " + str(newest_version[1:]) + "?")
+                        if newest_version and (float(newest_version[1:]) > float(Version[1:])):
+                            post("Flagtracker is version " + str(Version) + ". The latest version is " + str(
+                                newest_version) + ".")
+                        else:
+                            post("Flagtracker is version " + str(Version) + ". You have the latest version.")
+                    except Exception:
+                        logging.error(traceback.print_exc())
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "uptime":
+                if (Parent.HasPermission(data.User, script_settings.UptimeDisplayPermissions, "")
+                                         or user_id == "216768170"):
+                    if not script_uptime:
+                        post("Flagtracker: The script is not currently connected to the channel.")
+                    else:
+                        post("Flagtracker: The script has been connected to the channel for " + calculate_uptime())
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "reconnect":
+                if Parent.HasPermission(data.User, script_settings.ReconnectPermissions, "") or user_id == "216768170":
+                    global event_receiver
+                    if not event_receiver:
+                        post("Flagtracker: Attempting to connect to Twitch...")
+                        start()
+                    else:
+                        post("Flagtracker: The script is already connected. "
+                             "The script has been connected to the channel for " +
+                             calculate_uptime())
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "gist":
+                if (Parent.HasPermission(data.User, script_settings.GistUploadPermissions, "") or
+                                         user_id == "216768170"):
+                    # AllowGistUpload is not checked here
+                    post("Flagtracker: Uploading log file to gist.")
+                    upload_to_gist()
+                    if not script_settings.RetainLogFiles:
+                        delete_log_files(True)
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "help":
+                if (Parent.HasPermission(data.User, script_settings.HelpDisplayPermissions, "") or
+                                         user_id == "216768170"):
+                    if data.GetParamCount() > 1:
+                        help_subcommand = data.GetParam(2)
+                        if help_subcommand == "find":
+                            post("Flagtracker find subcommand usage: !" + script_settings.CommandName +
+                                 " find {username}. Looks through the queue and displays entries from the"
+                                 " specified user. Required permission level: '" +
+                                 script_settings.QueueFindPermissions + "'.")
+                        elif help_subcommand == "add":
+                            post("Flagtracker add subcommand usage: !" + script_settings.CommandName +
+                                 " add Username:{username}, Game:{game}, Message{redemption message}."
+                                 " Adds a new entry to the queue. Required permission level: '" +
+                                 script_settings.QueueAddPermissions + "'.")
+                        elif help_subcommand == "remove":
+                            post("Flagtracker remove subcommand usage: !" + script_settings.CommandName +
+                                 " remove {index}. Removes the redemption at the supplied index. Required"
+                                 " permission level: '" + script_settings.QueueRemovePermissions + "'.")
+                        elif help_subcommand == "edit":
+                            post("Flagtracker edit subcommand usage: !" + script_settings.CommandName +
+                                 " edit {index} (Username:{username})(,)(Game:{game})(,)(Message:{message})."
+                                 " Modifies the username, game, and/or message of the redemption at the supplied"
+                                 " index. Required permission level: '" + script_settings.QueueEditPermissions + "'.")
+                        elif help_subcommand == "updater":
+                            post("Flagtracker updater subcommand usage: !" + script_settings.CommandName +
+                                 " updater. Manually updates the Google Sheet, if it is enabled. Required"
+                                 " permission level: '" + script_settings.GoogleUpdaterPermissions + "'.")
+                        elif help_subcommand == "version":
+                            post("Flagtracker version subcommand usage: !" + script_settings.CommandName +
+                                 " version. Displays the current version of the script and the latest non-beta"
+                                 " script version available on GitHub. Required permission level: '" +
+                                 script_settings.VersionCheckPermissions + "'.")
+                        elif help_subcommand == "uptime":
+                            post("Flagtracker uptime subcommand usage: !" + script_settings.CommandName +
+                                 " uptime. If the script is connected to Twitch, displays how long the"
+                                 " script has been connected. Required permission level: '" +
+                                 script_settings.UptimeDisplayPermissions + "'.")
+                        elif help_subcommand == "gist":
+                            post("Flagtracker gist subcommand usage: !" + script_settings.CommandName +
+                                 " gist. Uploads the current log file to Crimdahl's gist and starts"
+                                 " a new log file. Required permission level: '" +
+                                 script_settings.GistUploadPermissions + "'.")
+                        else:
+                            post("Flagtracker help subcommand usage: !" + script_settings.CommandName +
+                                 " help {subcommand}. Current subcommands include find, add, remove, edit, updater,"
+                                 " version, uptime, gist, and help. Command syntax has variables you supply listed in"
+                                 " {brackets} and optional arguments listed in (parenthesis).")
+                    else:
+                        post("Flagtracker help subcommand usage: !" + script_settings.CommandName +
+                             " help {subcommand}. Current subcommands include find, add, remove, edit, updater,"
+                             " version, uptime, gist, and help. Command syntax has variables you supply listed in"
+                             " {brackets} and optional arguments listed in (parenthesis).")
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            else:
+                post("Flagtracker: Subcommand '" + subcommand + "' is not recognized. Available subcommands are: " +
+                     "find, add, remove, edit, updater, version, uptime, gist, and help")
 
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
-    global play_next_at
-    if play_next_at > datetime.datetime.now():
-        return
+    global play_next_at, thread, script_uptime, is_stream_live, retry_count
 
-    global thread
+    # If a thread exists but has completed its task, delete it so we can create a new one for new tasks
     if thread and not thread.isAlive():
         thread = None
 
@@ -475,23 +549,95 @@ def Tick():
         thread = thread_queue.pop(0)
         thread.start()
 
+    # Event receiver would be None at this point if it got disconnected. Attempt to reconnect if there are remaining
+    #   retries and the time period has elapsed.
+    if not event_receiver and \
+            retry_count < script_settings.ReconnectionAttempts and \
+            play_next_at <= datetime.now():
+        start()
+        if not event_receiver:
+            post("Flagtracker: failed to reconnect to Twitch. Retry " +
+                 str(retry_count) +
+                 " of " +
+                 str(script_settings.ReconnectionAttempts) + ".")
+            play_next_at = datetime.now() + timedelta(minutes=1)
+            retry_count += 1
+        else:
+            retry_count = 0
+            post("Flagtracker: Script reconnected.")
+
+    if not is_stream_live and Parent.IsLive():
+        # Stream has gone live.
+        is_stream_live = True
+        if not script_uptime:
+            post("Flagtracker: Welcome back! The script is not currently connected "
+                 "to the channel.")
+        else:
+            post("Flagtracker: Welcome back! The script has been connected to the "
+                 "channel for " + calculate_uptime())
+
+    if is_stream_live and not Parent.IsLive():
+        # Stream has stopped.
+        if script_settings.AllowGistUpload:
+            upload_to_gist()
+        is_stream_live = False
     return
 
 
+def upload_to_gist():
+    global LOG_PATH
+    with open(LOG_PATH) as logging_file:
+        contents = logging_file.read()
+        Parent.PostRequest(
+            "https://api.github.com/gists",
+            {
+                "accept": "application/vnd.github+json",
+                "authorization": "Bearer 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"
+            },
+            {
+                "description": "Flagtracker Log File",
+                "files": {
+                    os.path.basename(LOG_PATH): {
+                        "content": contents
+                    }
+                },
+                "public": True
+            }
+        )
+
+
+def delete_log_files(create_new_logs=True):
+    global LOG_PATH
+    for handler in logging.getLogger().handlers:
+        handler.close()
+        logging.getLogger().removeHandler(handler)
+    os.remove(LOG_PATH)
+
+    if create_new_logs:
+        # Create new logger
+        global LOG_PATH, SCRIPT_PATH
+        LOG_PATH = os.path.join(SCRIPT_PATH, "flagtrackerlog-" +
+                                strftime("%Y%m%d-%H%M%S") + ".txt")
+        logging.basicConfig(
+            filename=LOG_PATH,
+            level=logging.DEBUG,
+            format="%(asctime)s | %(levelname)s | %(funcName)s |  %(message)s",
+            datefmt="%Y-%m-%d %I:%M:%S %p"
+        )
+
+
 #   Reload settings and receiver when clicking Save Settings in the Chatbot
-def ReloadSettings(jsonData):
-    if script_settings.EnableDebug:
-        logging.debug("Saving new settings from SL Chatbot GUI.")
+def ReloadSettings(data):
+    logging.debug("Saving new settings from SL Chatbot GUI.")
     global event_receiver
     try:
         # Reload settings
-        script_settings.__dict__ = json.loads(jsonData)
+        script_settings.__dict__ = json.loads(data)
         script_settings.Save(SETTINGS_PATH)
 
-        unload()
+        Unload()
         start()
-        if script_settings.EnableDebug:
-            logging.debug("Settings saved and applied successfully.")
+        logging.debug("Settings saved and applied successfully.")
     except Exception as e:
         logging.critical(traceback.print_exc())
         raise e
@@ -505,22 +651,50 @@ def Init():
     global script_settings
     script_settings = Settings(SETTINGS_PATH)
     script_settings.Save(SETTINGS_PATH)
-    
+
+    global is_stream_live
+    # Update live state
+    if Parent.IsLive():
+        is_stream_live = True
+    else:
+        is_stream_live = False
+
     # Initialize Redemption Receiver
     start()
     load_redemptions()
+    if event_receiver:
+        post("Flagtracker: Twitch Connection Established.")
+    return
+
+
+def Unload():
+    post("Unload function called.")
+    # Disconnect EventReceiver cleanly
+    logging.info("Redemption event listener being disconnected.")
+    try:
+        if script_settings.AllowGistUpload:
+            logging.info("Uploading log file to gist.")
+            upload_to_gist()
+
+        if not script_settings.RetainLogFiles:
+            delete_log_files(create_new_logs=False)
+
+        global event_receiver
+        if event_receiver:
+            event_receiver.Disconnect()
+            logging.info("Redemption event listener disconnected.")
+            event_receiver = None
+    except:
+        logging.info("Event receiver already disconnected")
     return
 
 
 def start():
-    if script_settings.EnableDebug:
-        logging.debug("Initializing receiver and connecting to Twitch channel")
-
     global event_receiver
     event_receiver = TwitchPubSub()
     event_receiver.OnPubSubServiceConnected += event_receiver_connected
     event_receiver.OnRewardRedeemed += event_receiver_reward_redeemed
-    
+    event_receiver.OnPubSubServiceClosed += event_receiver_disconnected
     event_receiver.Connect()
     return
 
@@ -534,145 +708,137 @@ def event_receiver_connected(sender, e):
         }
         result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" +
                                               Parent.GetChannelName(), headers))
-
-        log("Receiver connection result: " + str(result))
-        logging.info("Receiver connection result: " + str(result))
-        if result['status'] == 401:
-            post("Flagtracker connection unauthorized. Please check your Twitch token in script settings.")
+        logging.debug("Receiver connection result: " + str(result))
+        if "error" in result.keys():
+            if result["error"] == "Unauthorized":
+                post("Flagtracker: The script is not authorized to listen for redemptions on this channel. "
+                     "Please ensure you have a valid oAuth key in the script settings.")
+            else:
+                post("Flagtracker: Unexpected error connecting to channel. See log files for more details.")
+                logging.critical("oAuth connection attempt error: " + str(result["error"]))
+            global event_receiver
+            event_receiver = None
+            return
 
         user = json.loads(result["response"])
         user_id = user["data"][0]["id"]
         event_receiver.ListenToRewards(user_id)
         event_receiver.SendTopics(script_settings.TwitchOAuthToken)
 
-        if script_settings.EnableDebug:
-            logging.debug("Method successfully completed.")
+        global script_uptime
+        script_uptime = datetime.now()
         return
     except Exception as e:
         logging.critical(str(e))
 
 
 def event_receiver_reward_redeemed(sender, e):
+    logging.debug("Redemption detected: " + str(e.RewardTitle))
     try:
-        if script_settings.EnableDebug:
-            logging.debug("Channel Point Redemption Triggered")
-            # logging.debug("List of attributes and methods in the event handler: " + str(dir(e)))
-        logging.info("Channel point reward " + str(e.RewardTitle) +
-                     " has been redeemed with status " + str(e.Status) + ".")
+        logging.debug("Channel point reward " + str(e.RewardTitle) +
+                      " has been redeemed with status " + str(e.Status) +
+                      ". Checking redemption name against list of redemptions.")
+        try:
+            for name in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
+                if str(e.RewardTitle).lower() == name:
+                    logging.debug("Redemption matches " + name)
+                else:
+                    logging.debug("Redemption does not match " + name)
+        except Exception as ex:
+            logging.debug(str(ex))
 
-        if str(e.Status).lower() == "unfulfilled" and str(e.RewardTitle).lower() in \
+        logging.debug("Processing redemption.")
+        if str(e.RewardTitle).lower() in \
                 [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
-            if script_settings.EnableDebug:
-                logging.debug("Unfulfilled redemption matches a reward name. "
-                              "Starting thread to add the redemption.")
-
-            thread_queue.append(
-                threading.Thread(
-                    target=reward_redeemed_worker,
-                    args=(e.RewardTitle, e.Message, e.DisplayName)
+            logging.debug("Redemption has status " + str(e.Status).lower())
+            if str(e.Status).lower() == "unfulfilled":
+                logging.debug("Starting thread to add the redemption.")
+                thread_queue.append(
+                    threading.Thread(
+                        target=reward_redeemed_worker,
+                        args=(e.RewardTitle, e.Message, e.DisplayName)
+                    )
                 )
-            )
-        elif str(e.Status).lower() == "action_taken" and str(e.RewardTitle).lower() \
-                in [name.strip().lower() for name in script_settings.TwitchRewardNames.split(",")]:
-            # Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there
-            # is a matching redemption in the queue that can be automatically removed.
-            logging.info("Fulfilled redemption matches a reward name. "
-                         "Attempting to auto-remove the redemption from the queue.")
-            for i in range(len(redemptions)):
-                if redemptions[i].Username == e.DisplayName and redemptions[i].Message == e.Message:
-                    redemptions.pop(i)
-                    save_redemptions()
-                    logging.info("Redemption at index " + str(i) + " automatically removed from the queue.")
-                    return
-            if script_settings.EnableDebug:
+            elif str(e.Status).lower() == "action_taken":
+                # Redemption is being removed from the Twitch dashboard. Iterate through redemptions and see if there
+                # is a matching redemption in the queue that can be automatically removed.
+                logging.debug("Attempting to remove finished redemption from queue.")
+                for i in range(len(redemptions)):
+                    if redemptions[i].Username == e.DisplayName and redemptions[i].Message == e.Message:
+                        logging.debug("Matching redemption found.")
+                        redemptions.pop(i)
+                        save_redemptions()
+                        logging.debug("Redemption at index " + str(i) + " automatically removed from the queue.")
+                        return
                 logging.debug("No matching redemption found.")
+            else:
+                logging.debug("Redemption is the wrong status. Skipping.")
         else:
-            if script_settings.EnableDebug:
-                logging.debug("Redemption is the wrong status and reward name. Skipping.")
-        if script_settings.EnableDebug:
-            logging.debug("Method successfully completed.")
+            logging.debug("Redemption is the wrong reward name. Skipping.")
     except Exception as e:
-        logging.critical(traceback.print_exc())
-        raise e
+        logging.critical(str(e))
     return
+
+
+def event_receiver_disconnected(sender, e):
+    if e:
+        post("FlagTracker: Connection to Twitch lost. See logs for error message.")
+        logging.error("Disconnect error: " + str(e))
+    else:
+        logging.debug("Connection to Twitch lost. No error was recorded, so this is probably fine.")
+    global script_uptime, event_receiver
+    script_uptime = None
+    event_receiver = None
 
 
 def reward_redeemed_worker(reward, message, data_username):
     try:
-        if script_settings.EnableDebug:
-            logging.debug("Thread started. Processing " +
-                          reward + " redemption from " + data_username + " with message " + message)
+        logging.debug("Processing " + reward + " redemption from " + data_username + " with message " + message)
 
         # When a person redeems,
         # only a reward name and message is supplied. Attempt to detect which game is being redeemed
         # for by scanning the message for keywords
         detection_string = str(reward + ' ' + message).lower().strip().replace(" ", "").replace(":", "")
+        logging.debug("Detection string: " + detection_string)
         new_game = detect_game(detection_string)
-
-        if script_settings.EnableDebug:
-            logging.debug("Redemption most closely matches game " + new_game + ".")
+        logging.debug("Redemption most closely matches game " + new_game + ".")
 
         # Create the new redemption object, append it to the list of redemptions, and save to file
         # (and Google Sheets, if enabled)
+        logging.debug("Making redemption.")
         new_redemption = Redemption(Username=data_username, Game=new_game, Message=message)
         redemptions.append(new_redemption)
         save_redemptions()
+        logging.debug("Redemption added and saved.")
         if script_settings.EnableResponses:
-            post("Thank you for redeeming " +
+            post("Flagtracker: Thank you for redeeming " +
                  reward + ", " + data_username + ". Your game has been added to the queue.")
-        
+
         global play_next_at
-        play_next_at = datetime.datetime.now() + datetime.timedelta(0, 0)
-        if script_settings.EnableDebug:
-            logging.debug("Method successfully completed.")
-    
+        play_next_at = datetime.now() + timedelta(0, 0)
+
     except Exception as e:
-        logging.critical(traceback.format_exc())
-        raise e
-    return
-
-
-def unload():
-    # Disconnect EventReceiver cleanly
-    logging.info("Redemption event listener being disconnected.")
-    try:
-        global event_receiver
-        if event_receiver:
-            event_receiver.Disconnect()
-            logging.info("Redemption event listener disconnected.")
-            event_receiver = None
-    except:
-        logging.info("Event receiver already disconnected")
+        logging.critical(str(e))
     return
 
 
 #   Opens readme file <Optional - DO NOT RENAME>
 def openreadme():
-    if script_settings.EnableDebug:
-        logging.debug("Opening readme file.")
+    logging.debug("Opening readme file.")
     os.startfile(README_PATH)
     return
 
 
 #   Opens Twitch.TV website to ask permissions
 def get_token():
-    if script_settings.EnableDebug:
-        logging.debug("Opening twitch web page to authenticate.")
+    logging.debug("Opening twitch web page to authenticate.")
     os.startfile("https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=7a4xexuuxvxw5jmb9httrqq9926frq"
                  "&redirect_uri=https://twitchapps.com/tokengen/&scope=channel:read:redemptions&force_verify=true")
-    return
 
 
 #   Helper method to log
 def log(message):
     Parent.Log(ScriptName, message)
-
-
-# def log_to_file(line):
-#     global log_file
-#     log_file = open(LOG_PATH, "a+")
-#     log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
-#     log_file.close()
 
 
 #   Helper method to post to Twitch Chat
@@ -681,7 +847,7 @@ def post(message):
 
 
 def save_redemptions():
-    try:        
+    try:
         # if the redemptions file does not exist, create it
         if not os.path.exists(REDEMPTIONS_PATH):
             logging.error("Redemptions.json did not exist.")
@@ -690,42 +856,33 @@ def save_redemptions():
                 logging.info("Redemptions.json has been created.")
 
         # record the redemptions
-        if script_settings.EnableDebug:
-            logging.debug("Writing redemption objects to redemptions.json file.")
+        logging.debug("Writing redemption objects to redemptions.json file.")
         with open(REDEMPTIONS_PATH, 'w') as outfile:
             outfile.seek(0)
             # When writing the Questions to disk, use the Question.toJSON() function
-            json.dump(redemptions, outfile, indent=4, default=lambda q: q.toJSON())
+            json.dump(redemptions, outfile, indent=4, default=lambda q: q.to_json())
             outfile.truncate()
             logging.info("Redemptions saved to redemptions.json.")
 
         # Because of chatbot limitations, a secondary, external script is run to take the json file and upload
         # the redemption information to a Google Sheet. The settings file is shared between scripts.
         if script_settings.EnableGoogleSheets:
-            if script_settings.EnableDebug:
-                logging.debug("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
-            update_google_sheet()
+            logging.debug("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
+            # update_google_sheet()
     except OSError as e:
-        logging.critical(traceback.print_exc())
-        raise e
+        logging.critical(str(e))
 
 
 def load_redemptions():
     # Ensure the questions file exists
-    if script_settings.EnableDebug:
-        logging.debug("Locating redemptions.json.")
     if os.path.exists(REDEMPTIONS_PATH):
-        if script_settings.EnableDebug:
-            logging.debug("Redemptions.json detected. Opening.")
         try:
             with open(REDEMPTIONS_PATH, "r") as infile:
-                if script_settings.EnableDebug:
-                    logging.debug("Loading object data from redemptions.json.")
-                object_data = json.load(infile)    # Load the json data
+                logging.debug("Loading object data from redemptions.json.")
+                object_data = json.load(infile)  # Load the json data
 
                 # For each object/question in the object_data, create new questions and feed them to the questions_list
-                if script_settings.EnableDebug:
-                    logging.debug("Creating redemption objects from the object data.")
+                logging.debug("Creating redemption objects from the object data.")
                 for redemption in object_data:
                     redemptions.append(
                         Redemption(
@@ -736,10 +893,10 @@ def load_redemptions():
                     )
                 logging.info(str(len(redemptions)) + " redemption(s) loaded from redemptions.json")
         except Exception as e:
-            logging.critical("ERROR loading redemptions from redemptions.json: " + str(e.message))
-            raise e
+            if not isinstance(e, ValueError):
+                logging.critical(str(e.message))
     else:
-        logging.error("No redemptions file detected. Creating one.")
+        logging.info("No redemptions file detected. Creating one.")
         open(REDEMPTIONS_PATH, "w").close()
 
 
@@ -754,12 +911,13 @@ def get_attribute(attribute, message):
     # or at the end of the message
     try:
         index_end_of_attribute = message[index_beginning_of_attribute:index_beginning_of_attribute +
-                                         message[index_beginning_of_attribute:].index(":")].rindex(",")
+                                                                      message[index_beginning_of_attribute:].index(
+                                                                          ":")].rindex(",")
     except ValueError:
         # If this error is thrown, the end of the message was hit, so just return all of the remaining message
         return message[index_beginning_of_attribute:].strip()
     return message[index_beginning_of_attribute:index_beginning_of_attribute +
-                   index_end_of_attribute].strip().strip(",")
+                                                index_end_of_attribute].strip().strip(",")
 
 
 def get_user_id(raw_data):
@@ -773,8 +931,8 @@ def get_user_id(raw_data):
 
 
 def detect_game(message):
+    logging.debug("Beginning game detection.")
     new_game = "Unknown"
-    detection_string = str(message).lower().strip().replace(" ", "").replace(":", "")
     game_information = {
         "Castlevania: SOTN Randomizer": {
             "keywords": {
@@ -962,47 +1120,69 @@ def detect_game(message):
             "hits": 0
         }
     }
-
+    logging.debug("Game dict created.")
     highest_hits = 0
-    for game, game_data in game_information.iteritems():
-        if "keywords" in game_data:
-            for keyword, value in game_data["keywords"].iteritems():
-                if keyword.lower().strip().replace(" ", "").replace(":", "") in detection_string:
-                    if "hits" in game_data:
-                        if script_settings.EnableDebug:
-                            logging.debug("Redemption matches keyword '" + keyword + "' under game " + game)
+    try:
+        for game, game_data in game_information.iteritems():
+            logging.debug("Iterating over game " + game)
+            if "keywords" in game_data:
+                for keyword, value in game_data["keywords"].iteritems():
+                    logging.debug("Iterating over key word " + keyword)
+                    if keyword.lower().strip().replace(" ", "").replace(":", "") in message:
+                        logging.debug("Redemption matches keyword '" + keyword + "' under game "
+                                      + game + " based on message " + message)
+                        if "hits" in game_data:
+                            logging.debug("Previous hits value: " + str(game_data["hits"]))
+                            game_data["hits"] = game_data["hits"] + value
+                            logging.debug("New hits value: " + str(game_data["hits"]))
 
-                        game_data["hits"] = game_data["hits"] + value
-
-                        if script_settings.EnableDebug:
-                            logging.debug(game + " keyword value is " + str(game_data["hits"]))
-
-                        if game_data["hits"] > highest_hits:
-                            new_game = game
-                            highest_hits = game_data["hits"]
-                        elif game_data["hits"] == highest_hits:
-                            new_game = new_game + " or " + game
+                            if game_data["hits"] > highest_hits:
+                                new_game = game
+                                highest_hits = game_data["hits"]
+                                logging.debug("Game " + game + " has the new highest hits.")
+                            elif game_data["hits"] == highest_hits:
+                                new_game = new_game + " or " + game
+                                logging.debug("Game " + game + " has tied the highest hits.")
+                    else:
+                        logging.debug("Key word " + keyword + " not found in message " + message)
+    except Exception as ex:
+        logging.debug(str(ex))
+        return "Unknown"
+    logging.debug("Returning new game " + new_game)
     return new_game
 
 
-def update_google_sheet():
-    # If the token json exists, check the expiry
-    # if script_settings.ExpiredTokenAction == "Chat Alert":
-    #     if os.path.isfile(TOKEN_PATH):
-    #         with open(TOKEN_PATH, 'rb') as token_file:
-    #             token_json = json.loads(token_file.read().decode("utf-8-sig"))
-    #             if 'expiry' in token_json:
-    #                 token_expiry = datetime.datetime.strptime(token_json['expiry'], "%Y-%m-%dT%H:%M:%S.%fZ")
-    #                 if token_expiry < datetime.datetime.now():
-    #                     post("Alert: Your Flag Tracker Google Sheets token is expired.")
-    #                     return
-    if script_settings.SpreadsheetID == "" or script_settings.Sheet == "":
-        logging.error("Error: No Spreadsheet ID and Sheet exist in Script Settings.")
-        return
-    threading.Thread(
-        target=os.system,
-        args=(GOOGLE_UPDATER_PATH,)
-    ).start()
+def calculate_uptime():
+    global script_uptime
+    response = ""
+    if script_uptime:
+        seconds_in_day = 86400
+        seconds_in_hour = 3600
+        seconds_in_minute = 60
+        current_time = datetime.now()
+        time_delta_in_seconds = (current_time - script_uptime).total_seconds()
+        if time_delta_in_seconds >= seconds_in_day:
+            response += str(int(time_delta_in_seconds / seconds_in_day)) + " days"
+            time_delta_in_seconds = time_delta_in_seconds % seconds_in_day
+        if time_delta_in_seconds >= seconds_in_hour:
+            if len(response) > 0:
+                response += ", "
+            response += str(int(time_delta_in_seconds / seconds_in_hour)) + " hours"
+            time_delta_in_seconds = time_delta_in_seconds % seconds_in_hour
+        if time_delta_in_seconds >= seconds_in_minute:
+            if len(response) > 0:
+                response += ", "
+            response += str(int(time_delta_in_seconds / seconds_in_minute)) + " minutes"
+            time_delta_in_seconds = time_delta_in_seconds % seconds_in_minute
+        if time_delta_in_seconds >= 0:
+            if len(response) > 0:
+                response += ", "
+            response += str(int(time_delta_in_seconds)) + " seconds"
+            # time_delta_in_seconds = time_delta_in_seconds % seconds_in_minute
+
+        response += "."
+
+    return response
 
 
 if __name__ == "__main__":

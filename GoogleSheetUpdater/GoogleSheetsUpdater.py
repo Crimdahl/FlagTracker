@@ -1,21 +1,17 @@
 from __future__ import print_function
-import os.path, sys, codecs, json, datetime
-import multiprocessing
-from multiprocessing.pool import ThreadPool
+import os.path, sys, json, datetime
 from datetime import datetime as dt
 
 import googleapiclient.errors
+import googleapiclient.discovery
 from googleapiclient.discovery import build_from_document
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
+from google.oauth2 import service_account
 
 #   Script Information
 #   Website = "https://www.twitch.tv/Crimdahl"
 #   Description = "Submits flags in a .json file to Google Sheets."
 #   Creator = "Crimdahl"
-#   Version = "1.5.2"
+#   Version = "2"
 
 script_run_path = os.path.dirname(os.path.abspath(__file__))
 if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
@@ -35,12 +31,12 @@ else:
     api_path = os.path.join(os.getcwd(), "sheets.v4.json")
 
 if hasattr(sys, "_MEIPASS"):
-    if os.path.isfile(os.path.join(os.getcwd(), "credentials.json")):
-        credentials_path = os.path.join(os.getcwd(), "credentials.json")
+    if os.path.isfile(os.path.join(os.getcwd(), "service_creds.json")):
+        credentials_path = os.path.join(os.getcwd(), "service_creds.json")
     else:
-        credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
+        credentials_path = os.path.join(sys._MEIPASS, "service_creds.json")
 else:
-    credentials_path = os.path.join(os.getcwd(), "credentials.json")
+    credentials_path = os.path.join(os.getcwd(), "service_creds.json")
 
 
 def load_redemptions():
@@ -76,13 +72,6 @@ def main():
     try:
         log("-------------------------------------------")
         log("Run datetime: " + dt.now().strftime("%Y-%m-%d %I:%M:%S %p"))
-        # log("Script path: " + script_run_path)
-        # log("Streamlabs Script path: " + streamlabs_script_path)
-        # log("Settings path: " + settings_path)
-        # log("Redemptions path: " + redemptions_path)
-        # log("API path: " + api_path)
-        # log("Token path: " + token_path)
-        # log("Credentials path: " + credentials_path)
         print()
         if os.path.isfile(credentials_path):
             log("Application credentials loaded successfully.")
@@ -111,28 +100,7 @@ def main():
 
         log("Attempting to sync your Google Sheet with redemptions.json.")
         if redemptions is not None and len(redemptions) > 0:
-            creds = None
-            # The file token.json stores the user's access and refresh tokens, and is
-            # created automatically when the authorization flow completes for the first
-            # time.
-            if os.path.exists(token_path):
-                log("Token file found at " + token_path)
-                creds = Credentials.from_authorized_user_file(token_path, api_scope)
-            #
-            #   BEGIN AREA OF SCRIPT I DO NOT FULLY UNDERSTAND
-            #
-            # If there are no (valid) credentials available, let the user log in.
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    log("The credentials existed, but needed a refresh.")
-                    try:
-                        creds.refresh(Request())
-                    except Exception as e:
-                        log("Exception caught when refreshing request: " + str(e))
-                else:
-                    log("The credentials did not exist or weren't valid. Opening browser window to authenticate.")
-                    creds = open_oauth_web_page(api_scope)
-
+            creds = service_account.Credentials.from_service_account_file(credentials_path, scopes=api_scope)
             log("Getting Sheets v4 API Information.")
             api = None
             if api_path and os.path.isfile(api_path):
@@ -144,9 +112,6 @@ def main():
                 log("ERROR: Failed to load Sheets v4 API Information.")
 
             service = build_from_document(api, credentials=creds)
-            #
-            #   END AREA OF SCRIPT I DO NOT FULLY UNDERSTAND
-            #
 
             # Call the Sheets API
             sheet = service.spreadsheets()
@@ -157,7 +122,7 @@ def main():
             for redemption in redemptions:
                 values.append([str(index), redemption["Username"], redemption["Game"], redemption["Message"]])
                 index = index + 1
-            for i in range(5):
+            for i in range(50):
                 values.append(["", "", "", ""])
             body = {"values": values}
             try:
@@ -177,28 +142,6 @@ def main():
     finally:
         if log_file:
             log_file.close()
-
-
-def open_oauth_web_page(api_scope):
-    flow = InstalledAppFlow.from_client_secrets_file(
-        credentials_path, api_scope)
-    pool = ThreadPool()
-    auth_thread = pool.apply_async(
-        func=flow.run_local_server,
-        kwds={'port': 0, 'prompt': 'consent'}
-    )
-    pool.close()
-    try:
-        creds = auth_thread.get(timeout=300)
-    except multiprocessing.TimeoutError:
-        pass
-    # creds = flow.run_local_server(port=0)
-    # Save the credentials for the next run
-    if creds:
-        log("Authentication successful. Saving the credentials to file.")
-        with open(token_path, 'w') as token:
-            token.write(creds.to_json())
-    return creds
 
 
 def log(line):
