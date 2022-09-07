@@ -11,7 +11,7 @@ from google.oauth2 import service_account
 #   Website = "https://www.twitch.tv/Crimdahl"
 #   Description = "Submits flags in a .json file to Google Sheets."
 #   Creator = "Crimdahl"
-#   Version = "2"
+#   Version = "2.1"
 
 
 def log(line):
