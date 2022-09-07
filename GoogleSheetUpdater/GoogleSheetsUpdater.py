@@ -13,31 +13,48 @@ from google.oauth2 import service_account
 #   Creator = "Crimdahl"
 #   Version = "2"
 
-script_run_path = os.path.dirname(os.path.abspath(__file__))
-if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
-    streamlabs_script_path = os.path.join(script_run_path, "Services/Scripts/FlagTracker")
-else:
-    streamlabs_script_path = script_run_path
-settings_path = os.path.join(streamlabs_script_path, "settings.json")
-redemptions_path = os.path.join(streamlabs_script_path, "redemptions.json")
-token_path = os.path.join(streamlabs_script_path, "token.json")
-log_path = os.path.join(streamlabs_script_path, "googlesheetsupdaterlog.txt")
-log_file = None
 
-api_path = None
-if hasattr(sys, "_MEIPASS"):
-    api_path = os.path.join(sys._MEIPASS, "sheets.v4.json")
-else:
-    api_path = os.path.join(os.getcwd(), "sheets.v4.json")
+def log(line):
+    global log_file
+    try:
+        log_file = open(log_path, "a+")
+        print(line)
+        if log_file:
+            log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
+        log_file.close()
+    except IOError:
+        pass
 
-if hasattr(sys, "_MEIPASS"):
-    if os.path.isfile(os.path.join(os.getcwd(), "service_creds.json")):
-        credentials_path = os.path.join(os.getcwd(), "service_creds.json")
+
+try:
+    script_run_path = os.path.dirname(os.path.abspath(__file__))
+    if os.path.exists(os.path.join(script_run_path, "Streamlabs Chatbot.exe")):
+        streamlabs_script_path = os.path.join(script_run_path, "Services/Scripts/FlagTracker")
     else:
-        credentials_path = os.path.join(sys._MEIPASS, "service_creds.json")
-else:
-    credentials_path = os.path.join(os.getcwd(), "service_creds.json")
+        streamlabs_script_path = script_run_path
+    settings_path = os.path.join(streamlabs_script_path, "settings.json")
+    redemptions_path = os.path.join(streamlabs_script_path, "redemptions.json")
+    token_path = os.path.join(streamlabs_script_path, "token.json")
+    log_path = os.path.join(streamlabs_script_path, "googlesheetsupdaterlog.txt")
+    log_file = None
 
+    api_path = None
+    if hasattr(sys, "_MEIPASS"):
+        api_path = os.path.join(sys._MEIPASS, "sheets.v4.json")
+    else:
+        api_path = os.path.join(os.getcwd(), "sheets.v4.json")
+
+    if hasattr(sys, "_MEIPASS"):
+        log("sys has MEIPASS")
+        if os.path.isfile(os.path.join(os.getcwd(), "credentials.json")):
+            credentials_path = os.path.join(os.getcwd(), "credentials.json")
+        else:
+            credentials_path = os.path.join(sys._MEIPASS, "credentials.json")
+    else:
+        log("sys does not have MEIPASS")
+        credentials_path = os.path.join(os.getcwd(), "credentials.json")
+except Exception as ex:
+    log(str(ex))
 
 def load_redemptions():
     if redemptions_path and os.path.isfile(redemptions_path):
@@ -142,18 +159,6 @@ def main():
     finally:
         if log_file:
             log_file.close()
-
-
-def log(line):
-    global log_file
-    try:
-        log_file = open(log_path, "a+")
-        print(line)
-        if log_file:
-            log_file.writelines(str(datetime.datetime.now()) + " " + line + "\n")
-        log_file.close()
-    except IOError:
-        pass
 
 
 if __name__ == '__main__':

@@ -10,6 +10,7 @@ import traceback
 import logging
 from time import strftime
 from datetime import datetime, timedelta
+from time import sleep
 
 
 # Try/Except here to avoid exceptions when __main__ code at the bottom
@@ -49,14 +50,24 @@ logging.basicConfig(
 log_file = None
 redemptions = []
 
-event_receiver = None
-thread_queue = []
-thread = None
-play_next_at = datetime.now()
+redemption_receiver = None
+redemption_thread_queue = []
+redemption_thread = None
+is_reconnect = False
+next_reconnect_attempt = datetime.now() + timedelta(seconds=30)
 
 is_stream_live = False
 script_uptime = None
 retry_count = 0
+
+
+class TestRedemptionEvent(object):
+    def __init__(self, **kwargs):
+        self.Username = kwargs["RewardTitle"] if "RewardTitle" in kwargs else "Unknown"
+        self.Game = kwargs["Status"] if "Status" in kwargs else "Unknown"
+        self.Message = kwargs["DisplayName"] if "DisplayName" in kwargs else "Unknown"
+        self.Message = kwargs["Message"] if "Message" in kwargs else "Unknown"
+        pass
 
 
 # Define Redemptions
@@ -232,7 +243,7 @@ def Execute(data):
                                 redemptions.pop(int(num) - removed_count)
                                 removed_count = removed_count + 1
                             save_redemptions()
-                            logging.debug("Successfully removed " + str(removed_count) + " redemptions.")
+                            logging.debug("Successfully removed " + str(removed_count - 1) + " redemption(s).")
                             post("Flagtracker: Redemption(s) successfully removed.")
                         except (ValueError, IndexError) as e:
                             # Log an error if the index is either a non-integer or is outside of the
@@ -280,8 +291,9 @@ def Execute(data):
                                 try:
                                     new_game = get_attribute("Game", info)
                                 except (AttributeError, ValueError):
+                                    if not new_message == "No message.":
+                                        new_game = detect_game("", new_message)
                                     pass
-
                                 new_redemption = Redemption(Username=new_user, Message=new_message, Game=new_game)
                                 if "index:" in info:
                                     insertion_index = int(get_attribute("Index", info)) - 1
@@ -457,10 +469,10 @@ def Execute(data):
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             elif subcommand == "reconnect":
                 if Parent.HasPermission(data.User, script_settings.ReconnectPermissions, "") or user_id == "216768170":
-                    global event_receiver
-                    if not event_receiver:
+                    global redemption_receiver
+                    if not redemption_receiver:
                         post("Flagtracker: Attempting to connect to Twitch...")
-                        start()
+                        Start()
                     else:
                         post("Flagtracker: The script is already connected. "
                              "The script has been connected to the channel for " +
@@ -539,32 +551,31 @@ def Execute(data):
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
-    global play_next_at, thread, script_uptime, is_stream_live, retry_count
+    global next_reconnect_attempt, redemption_thread, script_uptime, is_stream_live, retry_count
 
     # If a thread exists but has completed its task, delete it so we can create a new one for new tasks
-    if thread and not thread.isAlive():
-        thread = None
+    if redemption_thread and not redemption_thread.isAlive():
+        redemption_thread = None
 
-    if thread is None and len(thread_queue) > 0:
-        thread = thread_queue.pop(0)
-        thread.start()
+    if redemption_thread is None and len(redemption_thread_queue) > 0:
+        redemption_thread = redemption_thread_queue.pop(0)
+        redemption_thread.start()
 
     # Event receiver would be None at this point if it got disconnected. Attempt to reconnect if there are remaining
     #   retries and the time period has elapsed.
-    if not event_receiver and \
+    if not redemption_receiver and \
             retry_count < script_settings.ReconnectionAttempts and \
-            play_next_at <= datetime.now():
-        start()
-        if not event_receiver:
+            next_reconnect_attempt <= datetime.now():
+        Start()
+        if not redemption_receiver:
             post("Flagtracker: failed to reconnect to Twitch. Retry " +
                  str(retry_count) +
                  " of " +
                  str(script_settings.ReconnectionAttempts) + ".")
-            play_next_at = datetime.now() + timedelta(minutes=1)
+            next_reconnect_attempt = datetime.now() + timedelta(minutes=1)
             retry_count += 1
         else:
             retry_count = 0
-            post("Flagtracker: Script reconnected.")
 
     if not is_stream_live and Parent.IsLive():
         # Stream has gone live.
@@ -629,14 +640,14 @@ def delete_log_files(create_new_logs=True):
 #   Reload settings and receiver when clicking Save Settings in the Chatbot
 def ReloadSettings(data):
     logging.debug("Saving new settings from SL Chatbot GUI.")
-    global event_receiver
+    global redemption_receiver
     try:
         # Reload settings
         script_settings.__dict__ = json.loads(data)
         script_settings.Save(SETTINGS_PATH)
 
-        Unload()
-        start()
+        Unload(settings_reload=True)
+        Start()
         logging.debug("Settings saved and applied successfully.")
     except Exception as e:
         logging.critical(traceback.print_exc())
@@ -660,42 +671,40 @@ def Init():
         is_stream_live = False
 
     # Initialize Redemption Receiver
-    start()
+    Start()
     load_redemptions()
-    if event_receiver:
-        post("Flagtracker: Twitch Connection Established.")
     return
 
 
-def Unload():
-    post("Unload function called.")
+def Unload(settings_reload=False):
     # Disconnect EventReceiver cleanly
     logging.info("Redemption event listener being disconnected.")
     try:
+        global script_settings
         if script_settings.AllowGistUpload:
             logging.info("Uploading log file to gist.")
             upload_to_gist()
 
         if not script_settings.RetainLogFiles:
-            delete_log_files(create_new_logs=False)
+            delete_log_files(create_new_logs=settings_reload)
 
-        global event_receiver
-        if event_receiver:
-            event_receiver.Disconnect()
+        global redemption_receiver
+        if redemption_receiver:
+            redemption_receiver.Disconnect()
             logging.info("Redemption event listener disconnected.")
-            event_receiver = None
+            redemption_receiver = None
     except:
         logging.info("Event receiver already disconnected")
     return
 
 
-def start():
-    global event_receiver
-    event_receiver = TwitchPubSub()
-    event_receiver.OnPubSubServiceConnected += event_receiver_connected
-    event_receiver.OnRewardRedeemed += event_receiver_reward_redeemed
-    event_receiver.OnPubSubServiceClosed += event_receiver_disconnected
-    event_receiver.Connect()
+def Start():
+    global redemption_receiver
+    redemption_receiver = TwitchPubSub()
+    redemption_receiver.OnPubSubServiceConnected += event_receiver_connected
+    redemption_receiver.OnRewardRedeemed += event_receiver_reward_redeemed
+    redemption_receiver.OnPubSubServiceClosed += event_receiver_disconnected
+    redemption_receiver.Connect()
     return
 
 
@@ -706,6 +715,9 @@ def event_receiver_connected(sender, e):
             "Client-ID": "7a4xexuuxvxw5jmb9httrqq9926frq",
             "Authorization": "Bearer " + script_settings.TwitchOAuthToken
         }
+        if not Parent.GetChannelName():
+            # Sometimes the parent is not initialized at this point, so we wait a moment.
+            sleep(2)
         result = json.loads(Parent.GetRequest("https://api.twitch.tv/helix/users?login=" +
                                               Parent.GetChannelName(), headers))
         logging.debug("Receiver connection result: " + str(result))
@@ -716,17 +728,23 @@ def event_receiver_connected(sender, e):
             else:
                 post("Flagtracker: Unexpected error connecting to channel. See log files for more details.")
                 logging.critical("oAuth connection attempt error: " + str(result["error"]))
-            global event_receiver
-            event_receiver = None
+            global redemption_receiver
+            redemption_receiver = None
             return
 
         user = json.loads(result["response"])
         user_id = user["data"][0]["id"]
-        event_receiver.ListenToRewards(user_id)
-        event_receiver.SendTopics(script_settings.TwitchOAuthToken)
+        redemption_receiver.ListenToRewards(user_id)
+        redemption_receiver.SendTopics(script_settings.TwitchOAuthToken)
 
-        global script_uptime
+        global script_uptime, is_reconnect
         script_uptime = datetime.now()
+        if not is_reconnect:
+            post("Flagtracker: Twitch Connection Established.")
+            is_reconnect = True
+        else:
+            post("Flagtracker: Reconnected to Twitch.")
+
         return
     except Exception as e:
         logging.critical(str(e))
@@ -753,7 +771,7 @@ def event_receiver_reward_redeemed(sender, e):
             logging.debug("Redemption has status " + str(e.Status).lower())
             if str(e.Status).lower() == "unfulfilled":
                 logging.debug("Starting thread to add the redemption.")
-                thread_queue.append(
+                redemption_thread_queue.append(
                     threading.Thread(
                         target=reward_redeemed_worker,
                         args=(e.RewardTitle, e.Message, e.DisplayName)
@@ -786,9 +804,9 @@ def event_receiver_disconnected(sender, e):
         logging.error("Disconnect error: " + str(e))
     else:
         logging.debug("Connection to Twitch lost. No error was recorded, so this is probably fine.")
-    global script_uptime, event_receiver
+    global script_uptime, redemption_receiver
     script_uptime = None
-    event_receiver = None
+    redemption_receiver = None
 
 
 def reward_redeemed_worker(reward, message, data_username):
@@ -798,15 +816,14 @@ def reward_redeemed_worker(reward, message, data_username):
         # When a person redeems,
         # only a reward name and message is supplied. Attempt to detect which game is being redeemed
         # for by scanning the message for keywords
-        detection_string = str(reward + ' ' + message).lower().strip().replace(" ", "").replace(":", "")
-        logging.debug("Detection string: " + detection_string)
-        new_game = detect_game(detection_string)
+        new_game = detect_game(reward, message)
         logging.debug("Redemption most closely matches game " + new_game + ".")
 
         # Create the new redemption object, append it to the list of redemptions, and save to file
         # (and Google Sheets, if enabled)
         logging.debug("Making redemption.")
         new_redemption = Redemption(Username=data_username, Game=new_game, Message=message)
+        global redemptions
         redemptions.append(new_redemption)
         save_redemptions()
         logging.debug("Redemption added and saved.")
@@ -814,8 +831,8 @@ def reward_redeemed_worker(reward, message, data_username):
             post("Flagtracker: Thank you for redeeming " +
                  reward + ", " + data_username + ". Your game has been added to the queue.")
 
-        global play_next_at
-        play_next_at = datetime.now() + timedelta(0, 0)
+        global next_reconnect_attempt
+        next_reconnect_attempt = datetime.now() + timedelta(0, 0)
 
     except Exception as e:
         logging.critical(str(e))
@@ -868,7 +885,7 @@ def save_redemptions():
         # the redemption information to a Google Sheet. The settings file is shared between scripts.
         if script_settings.EnableGoogleSheets:
             logging.debug("Google Sheets is enabled. Running GoogleSheetsUpdater.exe.")
-            # update_google_sheet()
+            update_google_sheet()
     except OSError as e:
         logging.critical(str(e))
 
@@ -930,10 +947,32 @@ def get_user_id(raw_data):
     return raw_data
 
 
-def detect_game(message):
+def detect_game(reward, message):
+    message = str(message).lower().strip().replace(" ", "").replace(":", "")
     logging.debug("Beginning game detection.")
-    new_game = "Unknown"
+    detected_game = {"game": "Unknown", "likelihood": 0}
     game_information = {
+        "Timespinner": {
+            "keywords": {
+                "Timespinner": 5,
+                "Lunais": 5,
+                "Meyef": 5,
+                "Cantoran": 5,
+                "Talaria": 5,
+                "Eye Spy": 4,
+                "Gyre": 3,
+                "Downloadable": 2,
+                "Orbs": 2,
+                "Fragile": 2,
+                "Stinky": 2,
+                "Jewelry": 2,
+                "Inverted": 1,
+                "Lore": 1,
+                "Deathlink": 1,
+                "TS": 1
+            },
+            "likelihood": 0
+        },
         "Castlevania: SOTN Randomizer": {
             "keywords": {
                 "Symphony of the Night": 5,
@@ -962,14 +1001,23 @@ def detect_game(message):
                 "Jets of Time": 5,
                 "JoT": 2
             },
-            "hits": 0
+            "likelihood": 0
+        },
+        "Community's Choice": {
+            "keywords": {
+                "Chat": 3,
+                "Community": 3,
+                "Choice": 3,
+                "Viewer": 3
+            },
+            "likelihood": 0
         },
         "Golden Sun: TLA Randomizer": {
             "keywords": {
                 "TLA": 2,
                 "The Lost Age": 5
             },
-            "hits": 0
+            "likelihood": 0
         },
         "FFIV: Free Enterprise": {
             "keywords": {
@@ -983,40 +1031,43 @@ def detect_game(message):
                 "ksummon": 3,
                 "kmoon": 3,
                 "ktrap": 3,
-                "spoon": 1,
-                "wincrystal": 1,
-                "afflicted": 1,
-                "battlescars": 2,
-                "bodyguard": 1,
-                "enemyunknown": 2,
-                "musical": 1,
-                "fistfight": 2,
-                "floorislava": 2,
-                "forwardisback": 2,
-                "friendlyfire": 1,
-                "gottagofast": 2,
-                "batman": 1,
-                "imaginarynumbers": 3,
-                "isthisrandomized": 2,
-                "kleptomania": 3,
-                "menarepigs": 3,
-                "biggermagnet": 4,
-                "mysteryjuice": 3,
-                "neatfreak": 3,
-                "omnidextrous": 3,
+                "spoon": 2,
+                "wincrystal": 3,
+                "afflicted": 2,
+                "battlescars": 3,
+                "bodyguard": 2,
+                "enemyunknown": 3,
+                "musical": 2,
+                "fistfight": 3,
+                "floorislava": 3,
+                "forwardisback": 3,
+                "friendlyfire": 2,
+                "gottagofast": 3,
+                "batman": 2,
+                "imaginarynumbers": 4,
+                "isthisrandomized": 3,
+                "kleptomania": 4,
+                "menarepigs": 4,
+                "biggermagnet": 5,
+                "mysteryjuice": 4,
+                "neatfreak": 4,
+                "omnidextrous": 4,
                 "payablegolbez": 5,
-                "bigchocobo": 3,
-                "sixleggedrace": 3,
-                "skywarriors": 3,
-                "worthfighting": 3,
+                "bigchocobo": 4,
+                "sixleggedrace": 4,
+                "skywarriors": 4,
+                "worthfighting": 4,
                 "tellahmaneuver": 5,
-                "3point": 3,
-                "timeismoney": 3,
-                "unstackable": 1,
+                "3point": 4,
+                "timeismoney": 4,
+                "unstackable": 2,
                 "noadamants": 5,
-                "draft": 2
+                "draft": 3,
+                "pushbtojump": 5,
+                "supercannon": 4,
+                "sealedcave": 2
             },
-            "hits": 0
+            "likelihood": 0
         },
         "FFVI: Beyond Chaos": {
             "keywords": {
@@ -1030,7 +1081,7 @@ def detect_game(message):
                 "makeover": 1,
                 "notawaiter": 2
             },
-            "hits": 0
+            "likelihood": 0
         },
         "FFVI: Worlds Collide": {
             "keywords": {
@@ -1049,9 +1100,9 @@ def detect_game(message):
                 "Strago": 2,
                 "Gau": 2
             },
-            "hits": 0
+            "likelihood": 0
         },
-        "Timespinner Randomizer": {
+        "FFV: Career Day": {
             "keywords": {
                 "FFV": 2,
                 "FF5": 2,
@@ -1067,37 +1118,40 @@ def detect_game(message):
                 "Lenna": 2,
                 "Krile": 2
             },
-            "hits": 0
+            "likelihood": 0
         },
         "Secret of Mana Randomizer": {
             "keywords": {
                 "Secret of Mana": 5,
-                "Secret": 1,
                 "Mana": 3,
                 "SoM Rando": 3,
                 "SoM": 1,
+                "Secret": 1,
             },
-            "hits": 0
+            "likelihood": 0
         },
         "SMRPG Randomizer": {
             "keywords": {
                 "SMRPG": 5,
-                "Super": 1,
-                "Mario": 1,
-                "RPG": 1,
+                "Culex": 3,
                 "Mallow": 2,
                 "Geno": 2,
                 "Cspjl": 2,
+                "Super": 1,
+                "Mario": 1,
+                "RPG": 1,
+                "Peach": 1,
                 "fakeout": 1
             },
-            "hits": 0
+            "likelihood": 0
         },
         "Streamer's Choice": {
             "keywords": {
-                "Streamer": 1,
-                "Choice": 1
+                "Streamer": 3,
+                "Strimmer": 3,
+                "Choice": 3
             },
-            "hits": 0
+            "likelihood": 0
         },
         "Super Mario 3 Randomizer": {
             "keywords": {
@@ -1106,50 +1160,85 @@ def detect_game(message):
                 "SM3": 3,
                 "SM3R": 3
             },
-            "hits": 0
+            "likelihood": 0
+        },
+        "Zelda 1 Randomizer": {
+            "keywords": {
+                "Zelda 1": 5,
+                "Z1R": 5,
+                "Z1": 3,
+                "First Quest": 3,
+                "Second Quest": 3,
+                "1st Quest": 3,
+                "2nd Quest": 3,
+                "Mixed Quest": 3,
+                "Boomstick": 3,
+                "Shapes": 2,
+                "Bubble": 2,
+                "Candle": 2,
+                "Armos": 2,
+                "WhiteSword": 2,
+                "Ladder": 2,
+                "Book": 2,
+                "Ganon": 2,
+            },
+            "likelihood": 0
         },
         "Zelda 3: LTTP Randomizer": {
             "keywords": {
                 "LTTP": 5,
                 "Link to the Past": 5,
+                "Z3R": 5,
+                "Zelda3": 5,
+                "Shopsanity": 2,
                 "Pedestal": 2,
                 "Assured": 2,
-                "Z3R": 5,
-                "Zelda3": 5
+                "Ganon": 2,
+                "Armos": 2,
+                "Deathlink": 1,
             },
-            "hits": 0
-        }
+            "likelihood": 0
+        },
     }
+
+    def add_likelihood(detected_game, new_game, new_game_data, likelihood_value):
+        previous_likelihood_value = new_game_data["likelihood"]
+        game_data["likelihood"] = game_data["likelihood"] + likelihood_value
+        logging.debug("Game " + new_game + " likelihood value: " +
+                      str(previous_likelihood_value) + " -> " + str(new_game_data["likelihood"]))
+        if game_data["likelihood"] > detected_game["likelihood"]:
+            detected_game["game"] = game
+            detected_game["likelihood"] = game_data["likelihood"]
+            logging.debug("Game " + game + " has the new highest likelihood.")
+        elif game_data["likelihood"] == detected_game["likelihood"]:
+            detected_game["game"] = detected_game["game"] + " or " + game
+            logging.debug("Game " + game + " has tied the highest likelihood.")
+
     logging.debug("Game dict created.")
-    highest_hits = 0
     try:
         for game, game_data in game_information.iteritems():
+            # Check for the presence of the game name in the reward title
+            if reward and game in reward:
+                logging.debug("Game " + game + " matches redemption reward " + reward + ".")
+                add_likelihood(detected_game, game, game_data, 10)
+
             logging.debug("Iterating over game " + game)
             if "keywords" in game_data:
                 for keyword, value in game_data["keywords"].iteritems():
+                    # Check for the presence of the keyword in the message
                     logging.debug("Iterating over key word " + keyword)
                     if keyword.lower().strip().replace(" ", "").replace(":", "") in message:
                         logging.debug("Redemption matches keyword '" + keyword + "' under game "
                                       + game + " based on message " + message)
-                        if "hits" in game_data:
-                            logging.debug("Previous hits value: " + str(game_data["hits"]))
-                            game_data["hits"] = game_data["hits"] + value
-                            logging.debug("New hits value: " + str(game_data["hits"]))
-
-                            if game_data["hits"] > highest_hits:
-                                new_game = game
-                                highest_hits = game_data["hits"]
-                                logging.debug("Game " + game + " has the new highest hits.")
-                            elif game_data["hits"] == highest_hits:
-                                new_game = new_game + " or " + game
-                                logging.debug("Game " + game + " has tied the highest hits.")
+                        if "likelihood" in game_data:
+                            add_likelihood(detected_game, game, game_data, value)
                     else:
                         logging.debug("Key word " + keyword + " not found in message " + message)
     except Exception as ex:
         logging.debug(str(ex))
         return "Unknown"
-    logging.debug("Returning new game " + new_game)
-    return new_game
+    logging.debug("Returning new game " + detected_game["game"])
+    return detected_game["game"]
 
 
 def calculate_uptime():
@@ -1183,6 +1272,20 @@ def calculate_uptime():
         response += "."
 
     return response
+
+
+def update_google_sheet():
+    # If the token json exists, check the expiry
+    if script_settings.SpreadsheetID == "" or script_settings.Sheet == "":
+        logging.error("Error: No Spreadsheet ID and Sheet exist in Script Settings.")
+        return
+    logging.debug(GOOGLE_UPDATER_PATH)
+    updater_thread = threading.Thread(
+        target=os.system,
+        args=(GOOGLE_UPDATER_PATH,)
+    )
+    updater_thread.daemon = True
+    updater_thread.start()
 
 
 if __name__ == "__main__":
