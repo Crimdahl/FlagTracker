@@ -28,7 +28,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v2.1"
+Version = "v2.0.2"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -419,8 +419,7 @@ def Execute(data):
                     logging.debug("Updater argument received.")
                     if script_settings.EnableGoogleSheets:
                         update_google_sheet()
-                        post("Flagtracker: Google Sheets Updater executed. "
-                             "If no change occurs, the Google Sheets oAuth token may be expired.")
+                        post("Flagtracker: Google Sheets Updater executed.")
                         logging.debug("GoogleSheetsUpdater was successfully started.")
                     else:
                         post("Flagtracker: Google Sheets is disabled.")
@@ -599,11 +598,11 @@ def upload_to_gist():
     global LOG_PATH
     with open(LOG_PATH) as logging_file:
         contents = logging_file.read()
-        Parent.PostRequest(
+        logging.debug(Parent.PostRequest(
             "https://api.github.com/gists",
             {
                 "accept": "application/vnd.github+json",
-                "authorization": "Bearer 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"
+                "authorization": "Bearer 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"
             },
             {
                 "description": "Flagtracker Log File",
@@ -614,7 +613,7 @@ def upload_to_gist():
                 },
                 "public": True
             }
-        )
+        ))
 
 
 def delete_log_files(create_new_logs=True):
@@ -1282,7 +1281,7 @@ def update_google_sheet():
     logging.debug(GOOGLE_UPDATER_PATH)
     updater_thread = threading.Thread(
         target=os.system,
-        args=(GOOGLE_UPDATER_PATH,)
+        args=('"' + GOOGLE_UPDATER_PATH + '"',)
     )
     updater_thread.daemon = True
     updater_thread.start()
