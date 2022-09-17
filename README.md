@@ -29,6 +29,8 @@ Finally, add the Spreadsheet ID and the Sheet Name to the script settings. The S
 
 -Reconnection Attempts: The number of times the script can attempt to reconnect to Twitch when the connection is lost. (Default: 5)
 
+-Token Validity Check Interval: The number of minutes between automatic checks to see if the Twitch oAuth token is still valid. (Default: 10, 0 = Off).
+
 -Twitch oAuth Token: Your Twitch oAuth token to authenticate the script's redemption listener. (No default)
 
 -Enable Google Sheets: The toggle to enable usage of Google Sheets. (Default: Off)
@@ -68,6 +70,8 @@ Finally, add the Spreadsheet ID and the Sheet Name to the script settings. The S
 -Manual Reconnect Permissions: The permission level required to use the Reconnect subcommand to attempt to reconnect the script to Twitch. (Default: Moderator)
 
 -Manual Gist Upload Permissions: The permission level required to use the Gist subcommand to upload the current log file to Crimdahl's Gist. (Default: Caster)
+
+-Twitch oAuth Token Expiry Display Permissions: The permission level required to use the Token subcommand to display information about the current Twitch oAuth Token. (Default: Moderator)
 
 ### Commands
 

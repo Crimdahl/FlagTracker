@@ -35,6 +35,13 @@
 		"tooltip": "The number times the script will attempt to reconnect when disconnected. Reconnections attempts happen once per minute.",
 		"group": "General"
 	},
+	"TokenValidityCheckInterval": {
+		"type": "numberbox",
+		"value": "10",
+		"label": "Token Validity Check Interval in Minutes",
+		"tooltip": "The number of minutes between automatic checks to see if the Twitch oAuth token is still valid. 0 = Off.",
+		"group": "General"
+	},
 	"HelpDisplayPermissions": {
 		"type": "dropdown",
 		"value": "Everyone",
@@ -121,6 +128,14 @@
 		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
 		"label": "Manual Gist Upload Permissions",
 		"tooltip": "The permission level required to use the Gist subcommand to upload the current log file to Crimdahl's Gist.",
+		"group": "Permissions"
+	},
+	"TokenDisplayPermissions": {
+		"type": "dropdown",
+		"value": "Moderator",
+		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
+		"label": "Twitch oAuth Token Expiry Display Permissions",
+		"tooltip": "The permission level required to use the Token subcommand to display information about the current Twitch oAuth Token.",
 		"group": "Permissions"
 	},
 	"TwitchOAuthToken": {

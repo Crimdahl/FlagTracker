@@ -28,7 +28,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v2.0.2"
+Version = "v2.1.0"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -55,8 +55,9 @@ redemption_thread_queue = []
 redemption_thread = None
 is_reconnect = False
 next_reconnect_attempt = datetime.now() + timedelta(seconds=30)
+next_token_validity_check = datetime.now() + timedelta(seconds=30)
+validity_warning_issued = False
 
-is_stream_live = False
 script_uptime = None
 retry_count = 0
 
@@ -112,6 +113,7 @@ class Settings(object):
             self.UptimeDisplayPermissions = "Moderator"
             self.ReconnectPermissions = "Moderator"
             self.GistUploadPermissions = "Caster"
+            self.GistUploadPermissions = "Moderator"
 
             # Output Settings
             self.RetainLogFiles = False
@@ -126,6 +128,7 @@ class Settings(object):
             self.TwitchOAuthToken = ""
             self.TwitchRewardNames = ""
             self.ReconnectionAttempts = 5
+            self.TokenValidityCheckInterval = 10
 
             # Google Sheets Settings
             self.EnableGoogleSheets = False
@@ -463,19 +466,18 @@ def Execute(data):
                     if not script_uptime:
                         post("Flagtracker: The script is not currently connected to the channel.")
                     else:
-                        post("Flagtracker: The script has been connected to the channel for " + calculate_uptime())
+                        global script_uptime
+                        post("Flagtracker: The script has been connected to the channel for " +
+                             calculate_time_difference(script_uptime))
                 else:
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             elif subcommand == "reconnect":
                 if Parent.HasPermission(data.User, script_settings.ReconnectPermissions, "") or user_id == "216768170":
                     global redemption_receiver
-                    if not redemption_receiver:
-                        post("Flagtracker: Attempting to connect to Twitch...")
-                        Start()
-                    else:
-                        post("Flagtracker: The script is already connected. "
-                             "The script has been connected to the channel for " +
-                             calculate_uptime())
+                    if redemption_receiver:
+                        redemption_receiver.Disconnect()
+                    post("Flagtracker: Attempting to connect to Twitch...")
+                    Start()
                 else:
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             elif subcommand == "gist":
@@ -486,6 +488,28 @@ def Execute(data):
                     upload_to_gist()
                     if not script_settings.RetainLogFiles:
                         delete_log_files(True)
+                else:
+                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
+            elif subcommand == "token":
+                if (Parent.HasPermission(data.User, script_settings.TokenDisplayPermissions, "") or
+                                         user_id == "216768170"):
+                    try:
+                        results = json.loads(Parent.GetRequest("https://id.twitch.tv/oauth2/validate",
+                                          {
+                                              "Authorization": "OAuth " + script_settings.TwitchOAuthToken
+                                          }
+                        ))
+                        if results["status"] == 200:
+                            response = json.loads(results["response"])
+                            time_difference = datetime.now() + timedelta(seconds=response["expires_in"])
+                            post("Flagtracker: The current token is valid. It will last for " +
+                                calculate_time_difference(time_difference))
+                        else:
+                            global validity_warning_issued
+                            post("Flagtracker: The current token is not valid and needs to be refreshed.")
+                            validity_warning_issued = True
+                    except Exception as ex:
+                        logging.error("Error processing the token command: " + str(ex))
                 else:
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             elif subcommand == "help":
@@ -550,7 +574,7 @@ def Execute(data):
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
-    global next_reconnect_attempt, redemption_thread, script_uptime, is_stream_live, retry_count
+    global next_reconnect_attempt, redemption_thread, script_uptime, retry_count, next_token_validity_check
 
     # If a thread exists but has completed its task, delete it so we can create a new one for new tasks
     if redemption_thread and not redemption_thread.isAlive():
@@ -576,21 +600,37 @@ def Tick():
         else:
             retry_count = 0
 
-    if not is_stream_live and Parent.IsLive():
-        # Stream has gone live.
-        is_stream_live = True
-        if not script_uptime:
-            post("Flagtracker: Welcome back! The script is not currently connected "
-                 "to the channel.")
-        else:
-            post("Flagtracker: Welcome back! The script has been connected to the "
-                 "channel for " + calculate_uptime())
+    if not script_settings.TokenValidityCheckInterval <= 0 and \
+            next_token_validity_check <= datetime.now():
+        logging.debug("Performing Automatic Token Validity Check.")
+        next_token_validity_check = datetime.now() + timedelta(minutes=script_settings.TokenValidityCheckInterval)
+        try:
+            global validity_warning_issued
+            results = json.loads(Parent.GetRequest("https://id.twitch.tv/oauth2/validate",
+                                                   {
+                                                       "Authorization": "OAuth " + script_settings.TwitchOAuthToken
+                                                   }
+                                                   ))
+            if not results["status"] == 200:
+                logging.debug("Token Invalid.")
+                if validity_warning_issued:
+                    logging.debug("Skipping Token Validity Warning.")
+                else:
+                    logging.debug("Issuing Token Validity Warning.")
+                    post("Flagtracker: The current token has become invalid and needs to be refreshed.")
+                    validity_warning_issued = True
+                if redemption_thread:
+                    # Disconnect the redemption thread since the token is invalid
+                    redemption_thread.Disconnect()
+                elif script_uptime:
+                    # Reset the script uptime
+                    script_uptime = None
+            else:
+                logging.debug("Token Valid.")
+                validity_warning_issued = False
 
-    if is_stream_live and not Parent.IsLive():
-        # Stream has stopped.
-        if script_settings.AllowGistUpload:
-            upload_to_gist()
-        is_stream_live = False
+        except Exception as ex:
+            logging.error("Error attempting to automatically check the validity of the Twitch oAuth token.")
     return
 
 
@@ -691,7 +731,6 @@ def Unload(settings_reload=False):
         if redemption_receiver:
             redemption_receiver.Disconnect()
             logging.info("Redemption event listener disconnected.")
-            redemption_receiver = None
     except:
         logging.info("Event receiver already disconnected")
     return
@@ -703,6 +742,8 @@ def Start():
     redemption_receiver.OnPubSubServiceConnected += event_receiver_connected
     redemption_receiver.OnRewardRedeemed += event_receiver_reward_redeemed
     redemption_receiver.OnPubSubServiceClosed += event_receiver_disconnected
+    redemption_receiver.OnStreamUp += on_channel_live
+    redemption_receiver.OnStreamDown += on_channel_offline
     redemption_receiver.Connect()
     return
 
@@ -722,8 +763,10 @@ def event_receiver_connected(sender, e):
         logging.debug("Receiver connection result: " + str(result))
         if "error" in result.keys():
             if result["error"] == "Unauthorized":
+                global validity_warning_issued
                 post("Flagtracker: The script is not authorized to listen for redemptions on this channel. "
                      "Please ensure you have a valid oAuth key in the script settings.")
+                validity_warning_issued = True
             else:
                 post("Flagtracker: Unexpected error connecting to channel. See log files for more details.")
                 logging.critical("oAuth connection attempt error: " + str(result["error"]))
@@ -806,6 +849,53 @@ def event_receiver_disconnected(sender, e):
     global script_uptime, redemption_receiver
     script_uptime = None
     redemption_receiver = None
+
+
+def on_channel_live(sender, e):
+    global next_reconnect_attempt, next_token_validity_check
+    logging.debug("Channel has gone live!")
+    next_reconnect_attempt = datetime.now() + timedelta(minutes=1)
+    next_token_validity_check = datetime.now() + timedelta(minutes=script_settings.TokenValidityCheckInterval)
+
+    if script_settings.TwitchOAuthToken:
+        logging.debug("Checking token status.")
+        try:
+            results = json.loads(Parent.GetRequest("https://id.twitch.tv/oauth2/validate",
+                                                   {
+                                                       "Authorization": "OAuth " + script_settings.TwitchOAuthToken
+                                                   }
+                                                   ))
+            global script_uptime
+            global redemption_receiver
+            if results["status"] == 200:
+                if script_uptime:
+                    post("Flagtracker: Welcome back! The script has been connected to the "
+                         "channel for " + calculate_time_difference(script_uptime))
+                else:
+                    logging.debug("The Twitch oAuth token is valid, but somehow the script_uptime is None.")
+                    if redemption_receiver:
+                        redemption_receiver.Disconnect()
+                        logging.debug("Additionally, the script receiver exists.")
+            else:
+                global validity_warning_issued
+                post("Flagtracker: Welcome back! The current token is not valid and needs to be refreshed.")
+                validity_warning_issued = True
+                if redemption_receiver:
+                    redemption_receiver.Disconnect()
+                elif script_uptime:
+                    script_uptime = None
+        except Exception as ex:
+            logging.error("Exception when checking token validity: " + str(ex))
+    else:
+        logging.debug("No token existed. Skipping token validity check.")
+
+
+def on_channel_offline():
+    global next_token_validity_check, next_reconnect_attempt
+    if script_settings.AllowGistUpload:
+        upload_to_gist()
+    next_reconnect_attempt = datetime.now() + timedelta(days=365)
+    next_token_validity_check = datetime.now() + timedelta(days=365)
 
 
 def reward_redeemed_worker(reward, message, data_username):
@@ -1240,15 +1330,14 @@ def detect_game(reward, message):
     return detected_game["game"]
 
 
-def calculate_uptime():
-    global script_uptime
+def calculate_time_difference(time):
     response = ""
     if script_uptime:
         seconds_in_day = 86400
         seconds_in_hour = 3600
         seconds_in_minute = 60
         current_time = datetime.now()
-        time_delta_in_seconds = (current_time - script_uptime).total_seconds()
+        time_delta_in_seconds = abs((current_time - time).total_seconds())
         if time_delta_in_seconds >= seconds_in_day:
             response += str(int(time_delta_in_seconds / seconds_in_day)) + " days"
             time_delta_in_seconds = time_delta_in_seconds % seconds_in_day
