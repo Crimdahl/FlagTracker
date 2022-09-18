@@ -122,14 +122,6 @@
 		"tooltip": "The permission level required to use the Reconnect subcommand to attempt to reconnect the script to Twitch.",
 		"group": "Permissions"
 	},
-	"GistUploadPermissions": {
-		"type": "dropdown",
-		"value": "Caster",
-		"items": [ "Everyone", "Regular", "Subscriber", "Moderator", "Editor", "Caster" ],
-		"label": "Manual Gist Upload Permissions",
-		"tooltip": "The permission level required to use the Gist subcommand to upload the current log file to Crimdahl's Gist.",
-		"group": "Permissions"
-	},
 	"TokenDisplayPermissions": {
 		"type": "dropdown",
 		"value": "Moderator",
@@ -193,13 +185,6 @@
 		"value": false,
 		"label": "Retain Logs Locally",
 		"tooltip": "Enable or disable the automatic deletion of log files.",
-		"group": "Output Settings"
-	},
-	"AllowGistUpload": {
-		"type": "checkbox",
-		"value": true,
-		"label": "Allow Log Upload to Gist",
-		"tooltip": "Enable or disable the upload of the log file to Crimdahl's gist when the stream ends.",
 		"group": "Output Settings"
 	},
 	"btnreadme": {

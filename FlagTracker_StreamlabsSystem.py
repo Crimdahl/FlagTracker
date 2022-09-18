@@ -28,7 +28,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v2.1.1"
+Version = "v2.1.2"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -112,12 +112,10 @@ class Settings(object):
             self.VersionCheckPermissions = "Moderator"
             self.UptimeDisplayPermissions = "Moderator"
             self.ReconnectPermissions = "Moderator"
-            self.GistUploadPermissions = "Caster"
-            self.GistUploadPermissions = "Moderator"
+            self.TokenDisplayPermissions = "Moderator"
 
             # Output Settings
             self.RetainLogFiles = False
-            self.AllowGistUpload = True
             self.EnableResponses = True
             self.DisplayMessageOnGameUnknown = False
             self.RunCommandsOnlyWhenLive = True
@@ -480,16 +478,6 @@ def Execute(data):
                     Start()
                 else:
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
-            elif subcommand == "gist":
-                if (Parent.HasPermission(data.User, script_settings.GistUploadPermissions, "") or
-                                         user_id == "216768170"):
-                    # AllowGistUpload is not checked here
-                    post("Flagtracker: Uploading log file to gist.")
-                    upload_to_gist()
-                    if not script_settings.RetainLogFiles:
-                        delete_log_files(True)
-                else:
-                    post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             elif subcommand == "token":
                 if (Parent.HasPermission(data.User, script_settings.TokenDisplayPermissions, "") or
                                          user_id == "216768170"):
@@ -545,31 +533,31 @@ def Execute(data):
                                  " version. Displays the current version of the script and the latest non-beta"
                                  " script version available on GitHub. Required permission level: '" +
                                  script_settings.VersionCheckPermissions + "'.")
+                        elif help_subcommand == "token":
+                            post("Flagtracker uptime subcommand usage: !" + script_settings.CommandName +
+                                 " token. If the settings have a Twitch oAuth token,"
+                                 " validates the token and displays the expiration date: '" +
+                                 script_settings.TokenDisplayPermissions + "'.")
                         elif help_subcommand == "uptime":
                             post("Flagtracker uptime subcommand usage: !" + script_settings.CommandName +
                                  " uptime. If the script is connected to Twitch, displays how long the"
                                  " script has been connected. Required permission level: '" +
                                  script_settings.UptimeDisplayPermissions + "'.")
-                        elif help_subcommand == "gist":
-                            post("Flagtracker gist subcommand usage: !" + script_settings.CommandName +
-                                 " gist. Uploads the current log file to Crimdahl's gist and starts"
-                                 " a new log file. Required permission level: '" +
-                                 script_settings.GistUploadPermissions + "'.")
                         else:
                             post("Flagtracker help subcommand usage: !" + script_settings.CommandName +
                                  " help {subcommand}. Current subcommands include find, add, remove, edit, updater,"
-                                 " version, uptime, gist, and help. Command syntax has variables you supply listed in"
+                                 " version, uptime, token, and help. Command syntax has variables you supply listed in"
                                  " {brackets} and optional arguments listed in (parenthesis).")
                     else:
                         post("Flagtracker help subcommand usage: !" + script_settings.CommandName +
                              " help {subcommand}. Current subcommands include find, add, remove, edit, updater,"
-                             " version, uptime, gist, and help. Command syntax has variables you supply listed in"
+                             " version, uptime, token, and help. Command syntax has variables you supply listed in"
                              " {brackets} and optional arguments listed in (parenthesis).")
                 else:
                     post("Flagtracker: Sorry, " + data.UserName + ", you do not have permission to use that command.")
             else:
                 post("Flagtracker: Subcommand '" + subcommand + "' is not recognized. Available subcommands are: " +
-                     "find, add, remove, edit, updater, version, uptime, gist, and help")
+                     "find, add, remove, edit, updater, version, uptime, token, and help")
 
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
@@ -600,7 +588,6 @@ def Tick():
             retry_count += 1
         else:
             retry_count = 0
-
 
     if not script_settings.TokenValidityCheckInterval <= 0 and \
             next_token_validity_check <= datetime.now():
@@ -634,28 +621,6 @@ def Tick():
         except Exception as ex:
             logging.error("Error attempting to automatically check the validity of the Twitch oAuth token.")
     return
-
-
-def upload_to_gist():
-    global LOG_PATH
-    with open(LOG_PATH) as logging_file:
-        contents = logging_file.read()
-        logging.debug(Parent.PostRequest(
-            "https://api.github.com/gists",
-            {
-                "accept": "application/vnd.github+json",
-                "authorization": "Bearer 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"
-            },
-            {
-                "description": "Flagtracker Log File",
-                "files": {
-                    os.path.basename(LOG_PATH): {
-                        "content": contents
-                    }
-                },
-                "public": True
-            }
-        ))
 
 
 def delete_log_files(create_new_logs=True):
@@ -722,10 +687,6 @@ def Unload(settings_reload=False):
     logging.info("Redemption event listener being disconnected.")
     try:
         global script_settings
-        if script_settings.AllowGistUpload:
-            logging.info("Uploading log file to gist.")
-            upload_to_gist()
-
         if not script_settings.RetainLogFiles:
             delete_log_files(create_new_logs=settings_reload)
 
@@ -895,8 +856,6 @@ def on_channel_live(sender, e):
 
 def on_channel_offline():
     global next_token_validity_check, next_reconnect_attempt
-    if script_settings.AllowGistUpload:
-        upload_to_gist()
     next_reconnect_attempt = datetime.now() + timedelta(days=365)
     next_token_validity_check = datetime.now() + timedelta(days=365)
 

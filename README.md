@@ -45,8 +45,6 @@ Finally, add the Spreadsheet ID and the Sheet Name to the script settings. The S
 
 -Retain Logs Locally: Prevents the deletion of logs when the stream goes offline, the scripts get reloaded, or the chatbot shuts down. (Default: False)
 
--Allow Log Upload to Gist: Enables the ability for the script to upload log files as publicly accessible gists in my GitHub profile. For troubleshooting. (Default: True (for now))
-
 ### Permissions
 
 -Help Display Permissions: The permission level required to display the script help functions. (Default: Everyone)
@@ -69,8 +67,6 @@ Finally, add the Spreadsheet ID and the Sheet Name to the script settings. The S
 
 -Manual Reconnect Permissions: The permission level required to use the Reconnect subcommand to attempt to reconnect the script to Twitch. (Default: Moderator)
 
--Manual Gist Upload Permissions: The permission level required to use the Gist subcommand to upload the current log file to Crimdahl's Gist. (Default: Caster)
-
 -Twitch oAuth Token Expiry Display Permissions: The permission level required to use the Token subcommand to display information about the current Twitch oAuth Token. (Default: Moderator)
 
 ### Commands
@@ -90,8 +86,6 @@ Finally, add the Spreadsheet ID and the Sheet Name to the script settings. The S
 -!{CommandName} uptime: Displays the amount of time the script has been connected to Twitch, if it is connected.
 
 -!{CommandName} reconnect: Manually attempts to reconnect to Twitch.
-
--!{CommandName} gist: Manually uploads the current log file to Crimdahl's gist. If log files are not set to be retained, deletes the current file and makes a new one.
 
 -!{CommandName} help: Displays the available subcommands and syntaxes of those subcommands.
 
