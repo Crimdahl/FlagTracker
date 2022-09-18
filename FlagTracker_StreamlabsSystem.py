@@ -28,7 +28,7 @@ ScriptName = "FlagTracker"
 Website = "https://www.twitch.tv/Crimdahl"
 Description = "Tracks User Flag Redemptions by writing to json file."
 Creator = "Crimdahl"
-Version = "v2.1.0"
+Version = "v2.1.1"
 
 #   Define Global Variables <Required>
 SCRIPT_PATH = os.path.dirname(__file__)
@@ -574,7 +574,8 @@ def Execute(data):
 
 # [Required] Tick method (Gets called during every iteration even when there is no incoming data)
 def Tick():
-    global next_reconnect_attempt, redemption_thread, script_uptime, retry_count, next_token_validity_check
+    global next_reconnect_attempt, redemption_thread, script_uptime, retry_count, next_token_validity_check, \
+        validity_warning_issued
 
     # If a thread exists but has completed its task, delete it so we can create a new one for new tasks
     if redemption_thread and not redemption_thread.isAlive():
@@ -588,17 +589,18 @@ def Tick():
     #   retries and the time period has elapsed.
     if not redemption_receiver and \
             retry_count < script_settings.ReconnectionAttempts and \
-            next_reconnect_attempt <= datetime.now():
+            next_reconnect_attempt <= datetime.now() and \
+            not validity_warning_issued:
+        next_reconnect_attempt = datetime.now() + timedelta(minutes=1)
+        logging.debug("Attempting automatic reconnection. Attempt + " + str(retry_count + 1) + " of " +
+                      str(script_settings.ReconnectionAttempts) + ".")
         Start()
         if not redemption_receiver:
-            post("Flagtracker: failed to reconnect to Twitch. Retry " +
-                 str(retry_count) +
-                 " of " +
-                 str(script_settings.ReconnectionAttempts) + ".")
-            next_reconnect_attempt = datetime.now() + timedelta(minutes=1)
+            logging.debug("Flagtracker: failed to reconnect to Twitch.")
             retry_count += 1
         else:
             retry_count = 0
+
 
     if not script_settings.TokenValidityCheckInterval <= 0 and \
             next_token_validity_check <= datetime.now():
@@ -764,9 +766,10 @@ def event_receiver_connected(sender, e):
         if "error" in result.keys():
             if result["error"] == "Unauthorized":
                 global validity_warning_issued
-                post("Flagtracker: The script is not authorized to listen for redemptions on this channel. "
-                     "Please ensure you have a valid oAuth key in the script settings.")
-                validity_warning_issued = True
+                if not validity_warning_issued:
+                    post("Flagtracker: The script is not authorized to listen for redemptions on this channel. "
+                         "Please ensure you have a valid oAuth key in the script settings.")
+                    validity_warning_issued = True
             else:
                 post("Flagtracker: Unexpected error connecting to channel. See log files for more details.")
                 logging.critical("oAuth connection attempt error: " + str(result["error"]))
